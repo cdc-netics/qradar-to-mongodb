@@ -6,7 +6,7 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 
 ## [Unreleased]
 
-### Changed
+### Changed (Unreleased)
 
 - Soporte dual para credenciales MongoDB: usa MONGO_URI si existe, o construye URI desde variables separadas.
 - Documentacion y env example actualizados con variables MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_AUTH_SOURCE y MONGO_PARAMS.
