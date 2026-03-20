@@ -39,6 +39,18 @@ require_root() {
   fi
 }
 
+validate_service_identity() {
+  if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
+    err "Service user does not exist: $SERVICE_USER"
+    exit 1
+  fi
+
+  if ! getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
+    err "Service group does not exist: $SERVICE_GROUP"
+    exit 1
+  fi
+}
+
 show_program_info() {
   cat <<EOF
 =============================================
@@ -52,6 +64,7 @@ Python bin   : ${PYTHON_BIN}
 
 Actions:
   install   -> prepare venv, dependencies, .env, systemd and start service
+  repair    -> fix .env permissions, rewrite systemd unit and restart service
   uninstall -> stop/disable service and remove systemd unit safely
 EOF
 }
@@ -94,7 +107,26 @@ setup_env_file() {
     fi
   fi
 
-  chmod 600 "$APP_DIR/.env"
+  # Ensure the runtime service user can read the environment file.
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
+  chmod 640 "$APP_DIR/.env"
+}
+
+repair_env_permissions() {
+  if [[ ! -f "$APP_DIR/.env" ]]; then
+    warn ".env not found. Recreating from .env.example..."
+    if [[ -f "$APP_DIR/.env.example" ]]; then
+      cp "$APP_DIR/.env.example" "$APP_DIR/.env"
+      warn "Created $APP_DIR/.env from .env.example. Please edit with real values."
+    else
+      err "Missing both .env and .env.example in $APP_DIR"
+      exit 1
+    fi
+  fi
+
+  log "Fixing ownership and permissions for .env"
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
+  chmod 640 "$APP_DIR/.env"
 }
 
 validate_env_placeholders() {
@@ -197,6 +229,25 @@ uninstall_flow() {
   log "Safe uninstall complete. Application directory preserved: ${APP_DIR}"
 }
 
+repair_flow() {
+  check_paths
+
+  if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
+    warn "Virtualenv python not found at $APP_DIR/.venv/bin/python"
+    warn "Run install action first if dependencies are missing."
+  fi
+
+  repair_env_permissions
+  validate_env_placeholders
+  write_systemd_unit
+
+  log "Reloading systemd and restarting service..."
+  systemctl daemon-reload
+  systemctl enable "$SERVICE_NAME"
+  systemctl restart "$SERVICE_NAME"
+  show_status
+}
+
 prompt_action() {
   local choice
   local normalized
@@ -204,8 +255,9 @@ prompt_action() {
   while true; do
     printf "\nChoose an action:\n" >&2
     printf "  1) Install / Update service\n" >&2
-    printf "  2) Safe uninstall service\n" >&2
-    read -r -p "Selection [1/2]: " choice
+    printf "  2) Repair runtime/service (safe)\n" >&2
+    printf "  3) Safe uninstall service\n" >&2
+    read -r -p "Selection [1/2/3]: " choice
 
     normalized="$(normalize_action "$choice")"
     if [[ -n "$normalized" ]]; then
@@ -232,7 +284,10 @@ normalize_action() {
     1|install)
       echo "install"
       ;;
-    2|uninstall)
+    2|repair)
+      echo "repair"
+      ;;
+    3|uninstall)
       echo "uninstall"
       ;;
     *)
@@ -248,6 +303,10 @@ main() {
   require_cmd systemctl
   require_cmd grep
   require_cmd chmod
+  require_cmd chown
+  require_cmd getent
+  require_cmd id
+  validate_service_identity
 
   local raw_action="${1:-}"
   local action
@@ -263,12 +322,15 @@ main() {
     install)
       install_flow
       ;;
+    repair)
+      repair_flow
+      ;;
     uninstall)
       uninstall_flow
       ;;
     *)
       err "Unknown action: $raw_action"
-      err "Use: ./scripts/install_service.sh [install|uninstall|1|2]"
+      err "Use: ./scripts/install_service.sh [install|repair|uninstall|1|2|3]"
       exit 1
       ;;
   esac

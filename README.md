@@ -191,17 +191,26 @@ sudo ./scripts/install_service.sh
 Al ejecutarlo sin parametros muestra menu para elegir:
 
 - `Install / Update service`
+- `Repair runtime/service (safe)`
 - `Safe uninstall service`
 
 Modo no interactivo:
 
 ```bash
 sudo ./scripts/install_service.sh install
+sudo ./scripts/install_service.sh repair
 sudo ./scripts/install_service.sh uninstall
 # Equivalent short options:
 sudo ./scripts/install_service.sh 1
 sudo ./scripts/install_service.sh 2
+sudo ./scripts/install_service.sh 3
 ```
+
+`repair` corrige automaticamente el caso mas comun de falla:
+
+- Repara permisos/owner de `.env` para el usuario del servicio.
+- Reescribe el unit file de systemd con rutas correctas.
+- Ejecuta `daemon-reload`, `enable` y `restart`.
 
 Que hace automaticamente:
 

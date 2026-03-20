@@ -6,23 +6,17 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 
 ## [Unreleased]
 
-### Added (0.1.0-beta.1)
+### Added
 
-- Plantilla de servicio systemd en deploy/systemd/qradar-to-mongodb.service.
-- Script de instalacion automatica para Linux en scripts/install_service.sh.
-- Menu interactivo en el instalador para elegir instalacion o desinstalacion segura.
-- Modo no interactivo del instalador con argumentos install y uninstall.
+- Nueva accion repair para corregir permisos de .env y reparar systemd sin reinstalacion completa.
 
-### Changed (0.1.0-beta.1)
+### Changed
 
-- Soporte dual para credenciales MongoDB: usa MONGO_URI si existe, o construye URI desde variables separadas.
-- Documentacion y env example actualizados con variables MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_AUTH_SOURCE y MONGO_PARAMS.
-- Modo continuo de ejecucion mediante RUN_CONTINUOUS y RUN_INTERVAL_SECONDS.
 - Documentacion Linux actualizada para ejecucion permanente.
 
 ## [0.1.0-beta.1] - 2026-03-20
 
-### Added
+### Added (0.1.0-beta.1)
 
 - Estructura base del repositorio.
 - README orientado a Linux con instalacion, uso, variables y flujo.
@@ -35,7 +29,7 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 - Seccion en README con formato del documento MongoDB y tipos de datos.
 - Export opcional a TXT para pruebas mediante DEBUG_EXPORT_TXT y DEBUG_TXT_FILE.
 
-### Changed
+### Changed (0.1.0-beta.1)
 
 - Script principal con validacion de variables de entorno requeridas.
 - Manejo HTTP con timeout y validacion de respuestas mediante raise_for_status.
