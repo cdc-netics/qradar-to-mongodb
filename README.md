@@ -47,7 +47,13 @@ cp .env.example .env
 | --- | --- | --- |
 | `QRADAR_IP` | IP o hostname de QRadar | `10.10.10.10` |
 | `QRADAR_TOKEN` | Token SEC para API de QRadar | `xxxxxxxx` |
-| `MONGO_URI` | URI de conexion a MongoDB | `mongodb://localhost:27017` |
+| `MONGO_URI` | URI completa de conexion a MongoDB (prioridad alta) | `mongodb://user:pass@localhost:27017/?authSource=admin` |
+| `MONGO_HOST` | Host MongoDB (si no usas `MONGO_URI`) | `localhost` |
+| `MONGO_PORT` | Puerto MongoDB (si no usas `MONGO_URI`) | `27017` |
+| `MONGO_USER` | Usuario MongoDB (opcional) | `qradar_user` |
+| `MONGO_PASSWORD` | Password MongoDB (opcional) | `replace-me` |
+| `MONGO_AUTH_SOURCE` | Base de autenticacion de MongoDB | `admin` |
+| `MONGO_PARAMS` | Parametros extra URI (sin `?`) | `tls=true&retryWrites=true` |
 | `MONGO_DB` | Nombre de base de datos | `qradar_metrics` |
 | `MONGO_COLLECTION` | Nombre de coleccion destino | `eps_por_cliente` |
 | `MINUTOS_INTERVALO` | Ventana de consulta AQL en minutos | `60` |
@@ -56,6 +62,11 @@ cp .env.example .env
 | `MAX_POLL_ATTEMPTS` | Maximo de intentos de polling | `120` |
 | `DEBUG_EXPORT_TXT` | Exporta salida de prueba a TXT (`true`/`false`) | `false` |
 | `DEBUG_TXT_FILE` | Nombre del archivo TXT de debug | `debug_qradar_output.txt` |
+
+Prioridad de conexion MongoDB:
+
+- Si `MONGO_URI` existe, el script usa esa URI.
+- Si `MONGO_URI` no existe, construye la URI con `MONGO_HOST`, `MONGO_PORT`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_SOURCE` y `MONGO_PARAMS`.
 
 ## Regla de EPS
 

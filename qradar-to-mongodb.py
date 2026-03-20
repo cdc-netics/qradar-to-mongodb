@@ -3,6 +3,7 @@ import requests
 import time
 import urllib3
 import json
+from urllib.parse import quote_plus
 from datetime import datetime
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -27,6 +28,12 @@ SEC_TOKEN = os.getenv("QRADAR_TOKEN")
 
 # Parametros de conexion y destino en MongoDB.
 MONGO_URI = os.getenv("MONGO_URI")
+MONGO_HOST = os.getenv("MONGO_HOST")
+MONGO_PORT = os.getenv("MONGO_PORT", "27017")
+MONGO_USER = os.getenv("MONGO_USER")
+MONGO_PASSWORD = os.getenv("MONGO_PASSWORD")
+MONGO_AUTH_SOURCE = os.getenv("MONGO_AUTH_SOURCE", "admin")
+MONGO_PARAMS = os.getenv("MONGO_PARAMS")
 DB_NAME = os.getenv("MONGO_DB")
 COLLECTION_NAME = os.getenv("MONGO_COLLECTION")
 
@@ -48,7 +55,6 @@ def validate_required_env():
     required = {
         "QRADAR_IP": QRADAR_IP,
         "QRADAR_TOKEN": SEC_TOKEN,
-        "MONGO_URI": MONGO_URI,
         "MONGO_DB": DB_NAME,
         "MONGO_COLLECTION": COLLECTION_NAME,
     }
@@ -59,6 +65,35 @@ def validate_required_env():
     # Si falta alguna, se aborta antes de hacer llamadas remotas.
     if missing:
         raise ValueError(f"Faltan variables de entorno requeridas: {', '.join(missing)}")
+
+    # Valida credenciales de Mongo por cualquiera de los dos modos soportados.
+    get_mongo_uri()
+
+
+def get_mongo_uri():
+    # Modo 1 (preferido): URI completa provista por entorno.
+    if MONGO_URI:
+        return MONGO_URI
+
+    # Modo 2: construccion desde variables separadas.
+    if not MONGO_HOST:
+        raise ValueError("Debe definir MONGO_URI o MONGO_HOST para conectar a MongoDB")
+
+    if (MONGO_USER and not MONGO_PASSWORD) or (MONGO_PASSWORD and not MONGO_USER):
+        raise ValueError("Debe definir ambos MONGO_USER y MONGO_PASSWORD, o ninguno")
+
+    auth_part = ""
+    if MONGO_USER and MONGO_PASSWORD:
+        auth_part = f"{quote_plus(MONGO_USER)}:{quote_plus(MONGO_PASSWORD)}@"
+
+    query_parts = []
+    if MONGO_AUTH_SOURCE:
+        query_parts.append(f"authSource={quote_plus(MONGO_AUTH_SOURCE)}")
+    if MONGO_PARAMS:
+        query_parts.append(MONGO_PARAMS.lstrip("?"))
+    query_string = f"?{'&'.join(query_parts)}" if query_parts else ""
+
+    return f"mongodb://{auth_part}{MONGO_HOST}:{MONGO_PORT}/{query_string}"
 
 
 def request_json(response):
@@ -98,6 +133,8 @@ def export_debug_txt(documentos):
 def sync_qradar_to_mongo():
     # Validacion temprana para evitar errores ambiguos mas adelante.
     validate_required_env()
+
+    mongo_uri = get_mongo_uri()
 
     # 1) Consulta AQL: cuenta eventos por dominio en una ventana de tiempo.
     #    metric  -> nombre del dominio
@@ -162,7 +199,7 @@ def sync_qradar_to_mongo():
         )
         
         # 5) Conexion a Mongo y preparacion de documentos de salida.
-        client = MongoClient(MONGO_URI)
+        client = MongoClient(mongo_uri)
         col = client[DB_NAME][COLLECTION_NAME]
         
         # Marca temporal compartida por todos los documentos de esta corrida.
@@ -190,8 +227,8 @@ def sync_qradar_to_mongo():
                 "hora": ahora.strftime("%H:00")
             })
 
-            # Export de prueba opcional a TXT; util para validar conversion antes de productivo.
-            export_debug_txt(documentos)
+        # Export de prueba opcional a TXT; util para validar conversion antes de productivo.
+        export_debug_txt(documentos)
 
         # Inserta lote solo si hubo resultados.
         if documentos:
