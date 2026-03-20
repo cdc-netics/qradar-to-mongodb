@@ -80,6 +80,24 @@ sudo systemctl restart qradar-to-mongodb
 
 ---
 
+## 🧪 Prueba de Humo (Smoke Test)
+
+Si desea validar que todo está correctamente configurado (red, QRadar y MongoDB) ejecutando el script una sola vez en el entorno real del sistema:
+
+```bash
+sudo systemd-run --unit qradar-smoketest --wait --collect \
+  -p WorkingDirectory=/opt/qradar-to-mongodb \
+  /bin/bash -lc 'set -a; source /opt/qradar-to-mongodb/.env; set +a; RUN_CONTINUOUS=false MINUTOS_INTERVALO=5 /opt/qradar-to-mongodb/.venv/bin/python /opt/qradar-to-mongodb/qradar-to-mongodb.py'
+```
+
+Este comando:
+- Crea una unidad temporal en systemd.
+- Carga las variables de `.env`.
+- Fuerza `RUN_CONTINUOUS=false` para ejecutar una sola vez.
+- Usa una ventana de 5 minutos (`MINUTOS_INTERVALO=5`) para una respuesta rápida.
+
+---
+
 ## 🔍 Solución de Problemas (Troubleshooting)
 
 - **Error: search_id no devuelto**: Verifique que el `QRADAR_TOKEN` no haya expirado y que la `QRADAR_IP` sea accesible.
