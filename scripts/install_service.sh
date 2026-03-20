@@ -10,6 +10,7 @@ SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$(id -un)}}"
 SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+SELECTED_ACTION=""
 
 log() {
   printf "[INFO] %s\n" "$*"
@@ -198,14 +199,14 @@ uninstall_flow() {
 
 prompt_action() {
   local choice
-  printf "\nChoose an action:\n"
-  printf "  1) Install / Update service\n"
-  printf "  2) Safe uninstall service\n"
+  printf "\nChoose an action:\n" >&2
+  printf "  1) Install / Update service\n" >&2
+  printf "  2) Safe uninstall service\n" >&2
   read -r -p "Selection [1/2]: " choice
 
   case "$choice" in
-    1) echo "install" ;;
-    2) echo "uninstall" ;;
+    1) SELECTED_ACTION="install" ;;
+    2) SELECTED_ACTION="uninstall" ;;
     *)
       err "Invalid selection: $choice"
       exit 1
@@ -223,7 +224,8 @@ main() {
 
   local action="${1:-}"
   if [[ -z "$action" ]]; then
-    action="$(prompt_action)"
+    prompt_action
+    action="$SELECTED_ACTION"
   fi
 
   case "$action" in
