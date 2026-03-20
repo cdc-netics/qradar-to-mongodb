@@ -65,8 +65,8 @@ cp .env.example .env
 
 Prioridad de conexion MongoDB:
 
-- Si `MONGO_URI` existe, el script usa esa URI.
-- Si `MONGO_URI` no existe, construye la URI con `MONGO_HOST`, `MONGO_PORT`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_SOURCE` y `MONGO_PARAMS`.
+- Si `MONGO_USER` y `MONGO_PASSWORD` estan definidos, el script construye la URI con `MONGO_HOST`, `MONGO_PORT`, `MONGO_AUTH_SOURCE` y `MONGO_PARAMS`.
+- Si `MONGO_USER` y `MONGO_PASSWORD` estan vacios, el script usa `MONGO_URI`.
 
 ## Regla de EPS
 

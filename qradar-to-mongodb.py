@@ -71,8 +71,12 @@ def validate_required_env():
 
 
 def get_mongo_uri():
+    # Si hay usuario/password definidos, se prioriza modo por variables separadas.
+    # Esto evita errores cuando MONGO_URI apunta a localhost sin auth.
+    use_separate_credentials = bool(MONGO_USER or MONGO_PASSWORD)
+
     # Modo 1 (preferido): URI completa provista por entorno.
-    if MONGO_URI:
+    if MONGO_URI and not use_separate_credentials:
         return MONGO_URI
 
     # Modo 2: construccion desde variables separadas.
