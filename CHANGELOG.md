@@ -13,6 +13,8 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 ### Changed
 
 - Documentacion Linux actualizada para ejecucion permanente.
+- Manejo horario ajustado a zona de negocio configurable (`APP_TIMEZONE`, default `America/Santiago`).
+- Nuevo campo `hora_minuto` para reflejar hora local exacta y evitar confusion con `hora` truncada (`HH:00`).
 
 ## [0.1.0-beta.1] - 2026-03-20
 

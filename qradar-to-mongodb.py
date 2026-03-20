@@ -4,7 +4,8 @@ import time
 import urllib3
 import json
 from urllib.parse import quote_plus
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
@@ -39,6 +40,10 @@ COLLECTION_NAME = os.getenv("MONGO_COLLECTION")
 
 # Ventana de tiempo (en minutos) usada por la consulta AQL.
 MINUTOS_INTERVALO = int(os.getenv("MINUTOS_INTERVALO", 60))
+
+# Zona horaria de referencia para campos de fecha/hora de negocio.
+# Por defecto se usa horario de Chile.
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "America/Santiago")
 
 # Controla si se genera un TXT de prueba por cada corrida.
 # En productivo dejar en false para deshabilitarlo facilmente.
@@ -140,6 +145,19 @@ def export_debug_txt(documentos):
             f.write(json.dumps(doc_copy, ensure_ascii=True) + "\n")
 
 
+def get_time_context():
+    try:
+        tz = ZoneInfo(APP_TIMEZONE)
+    except Exception as exc:
+        raise ValueError(f"Zona horaria invalida en APP_TIMEZONE: {APP_TIMEZONE}") from exc
+
+    # Se guarda fecha en UTC para consistencia tecnica en Mongo.
+    # Campos dia/hora/hora_minuto se calculan en timezone de negocio (Chile por defecto).
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(tz)
+    return now_utc, now_local
+
+
 def sync_qradar_to_mongo():
     # Validacion temprana para evitar errores ambiguos mas adelante.
     validate_required_env()
@@ -213,7 +231,7 @@ def sync_qradar_to_mongo():
         col = client[DB_NAME][COLLECTION_NAME]
         
         # Marca temporal compartida por todos los documentos de esta corrida.
-        ahora = datetime.now()
+        ahora_utc, ahora_local = get_time_context()
 
         # Lista batch para insertar en una sola operacion (insert_many).
         documentos = []
@@ -232,9 +250,11 @@ def sync_qradar_to_mongo():
                 "cliente": row['metric'] if row['metric'] else "Default Domain",
                 "eventos_totales": total_eventos,
                 "eps": eps_calculado,
-                "fecha": ahora,
-                "dia": ahora.strftime("%Y-%m-%d"),
-                "hora": ahora.strftime("%H:00")
+                "fecha": ahora_utc,
+                "dia": ahora_local.strftime("%Y-%m-%d"),
+                "hora": ahora_local.strftime("%H:00"),
+                "hora_minuto": ahora_local.strftime("%H:%M"),
+                "timezone": APP_TIMEZONE,
             })
 
         # Export de prueba opcional a TXT; util para validar conversion antes de productivo.

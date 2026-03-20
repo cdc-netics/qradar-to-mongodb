@@ -57,6 +57,7 @@ cp .env.example .env
 | `MONGO_DB` | Nombre de base de datos | `qradar_metrics` |
 | `MONGO_COLLECTION` | Nombre de coleccion destino | `eps_por_cliente` |
 | `MINUTOS_INTERVALO` | Ventana de consulta AQL en minutos | `60` |
+| `APP_TIMEZONE` | Zona horaria de negocio para `dia` y `hora` | `America/Santiago` |
 | `REQUEST_TIMEOUT` | Timeout HTTP para QRadar en segundos | `30` |
 | `POLL_INTERVAL_SECONDS` | Espera entre consultas de estado | `2` |
 | `MAX_POLL_ATTEMPTS` | Maximo de intentos de polling | `120` |
@@ -87,7 +88,9 @@ Cada dominio (cliente) se guarda como un documento con esta estructura:
     "eps": 2,
     "fecha": "2026-03-20T14:35:10.123456",
     "dia": "2026-03-20",
-    "hora": "14:00"
+    "hora": "14:00",
+    "hora_minuto": "14:35",
+    "timezone": "America/Santiago"
 }
 ```
 
@@ -96,9 +99,11 @@ Tipos almacenados:
 - `cliente`: string
 - `eventos_totales`: int
 - `eps`: int
-- `fecha`: BSON Date en MongoDB (en el ejemplo se muestra como texto ISO solo para lectura)
+- `fecha`: BSON Date en UTC (timestamp tecnico)
 - `dia`: string
-- `hora`: string
+- `hora`: string (truncada por hora, formato HH:00)
+- `hora_minuto`: string (hora local exacta, formato HH:MM)
+- `timezone`: string (zona horaria aplicada a dia/hora)
 
 ## Prueba con TXT (opcional)
 
