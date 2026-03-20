@@ -199,17 +199,44 @@ uninstall_flow() {
 
 prompt_action() {
   local choice
-  printf "\nChoose an action:\n" >&2
-  printf "  1) Install / Update service\n" >&2
-  printf "  2) Safe uninstall service\n" >&2
-  read -r -p "Selection [1/2]: " choice
+  local normalized
 
-  case "$choice" in
-    1) SELECTED_ACTION="install" ;;
-    2) SELECTED_ACTION="uninstall" ;;
+  while true; do
+    printf "\nChoose an action:\n" >&2
+    printf "  1) Install / Update service\n" >&2
+    printf "  2) Safe uninstall service\n" >&2
+    read -r -p "Selection [1/2]: " choice
+
+    normalized="$(normalize_action "$choice")"
+    if [[ -n "$normalized" ]]; then
+      SELECTED_ACTION="$normalized"
+      return
+    fi
+
+    err "Invalid selection: $choice"
+  done
+}
+
+normalize_action() {
+  local input_action="$1"
+  local normalized
+
+  # Trim leading/trailing spaces.
+  input_action="${input_action#"${input_action%%[![:space:]]*}"}"
+  input_action="${input_action%"${input_action##*[![:space:]]}"}"
+
+  # Normalize to lowercase for matching.
+  normalized="${input_action,,}"
+
+  case "$normalized" in
+    1|install)
+      echo "install"
+      ;;
+    2|uninstall)
+      echo "uninstall"
+      ;;
     *)
-      err "Invalid selection: $choice"
-      exit 1
+      echo ""
       ;;
   esac
 }
@@ -222,11 +249,15 @@ main() {
   require_cmd grep
   require_cmd chmod
 
-  local action="${1:-}"
-  if [[ -z "$action" ]]; then
+  local raw_action="${1:-}"
+  local action
+
+  if [[ -z "$raw_action" ]]; then
     prompt_action
-    action="$SELECTED_ACTION"
+    raw_action="$SELECTED_ACTION"
   fi
+
+  action="$(normalize_action "$raw_action")"
 
   case "$action" in
     install)
@@ -236,8 +267,8 @@ main() {
       uninstall_flow
       ;;
     *)
-      err "Unknown action: $action"
-      err "Use: ./scripts/install_service.sh [install|uninstall]"
+      err "Unknown action: $raw_action"
+      err "Use: ./scripts/install_service.sh [install|uninstall|1|2]"
       exit 1
       ;;
   esac

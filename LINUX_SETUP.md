@@ -144,6 +144,9 @@ Tambien puedes usar modo no interactivo:
 ```bash
 sudo ./scripts/install_service.sh install
 sudo ./scripts/install_service.sh uninstall
+# Equivalent short options:
+sudo ./scripts/install_service.sh 1
+sudo ./scripts/install_service.sh 2
 ```
 
 Este script:
