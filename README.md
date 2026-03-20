@@ -104,6 +104,7 @@ Este comando:
 - **El script no inicia (ModuleNotFoundError)**: Asegúrese de estar ejecutando el script dentro del entorno virtual (`source .venv/bin/activate`).
 - **Fallas de conexión a MongoDB**: Verifique que `MONGO_USER` y `MONGO_PASSWORD` sean correctos o que la `MONGO_URI` no tenga errores de sintaxis. Use `repair` en el instalador si sospecha de permisos en `.env`.
 - **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
+- **Error al bajar cambios (git pull)**: Si git detecta cambios locales (comúnmente tras un `chmod`) que impiden el pull, use: `git stash push -m "local-install-script-fix"` para limpiar el estado temporalmente y reintentar el `git pull`.
 
 ---
 

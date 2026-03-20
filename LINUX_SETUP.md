@@ -94,4 +94,4 @@ sudo ./scripts/install_service.sh repair
 1.  **Seguridad**: Configure el archivo `.env` con permisos restrictivos (`chmod 600 .env`) para que solo el propietario pueda leer los tokens.
 2.  **Tokens**: Use un Token SEC en QRadar que tenga permisos limitados solo a las API de búsqueda Ariel.
 3.  **Monitoreo**: El script guarda una marca de tiempo `fecha` en cada documento en MongoDB. Puede crear alertas si no se reciben datos nuevos en el intervalo esperado.
-4.  **Actualizaciones**: Para actualizar el código, simplemente haga un `git pull` (o reemplace los archivos) y ejecute `sudo ./scripts/install_service.sh install` de nuevo para refrescar dependencias.
+4.  **Actualizaciones**: Para actualizar el código, simplemente haga un `git pull` (o reemplace los archivos). Si git reporta errores por cambios locales (ej: `chmod`), use `git stash push -m "local-install-script-fix"` antes del pull. Finalmente, ejecute `sudo ./scripts/install_service.sh install` para refrescar dependencias.
