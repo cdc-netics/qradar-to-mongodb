@@ -63,6 +63,30 @@ cp .env.example .env
 - El resultado se guarda como entero (sin decimales).
 - Si el promedio da `0`, se fuerza a `1` por requerimiento operativo.
 
+## Formato de documento en MongoDB
+
+Cada dominio (cliente) se guarda como un documento con esta estructura:
+
+```json
+{
+    "cliente": "ACME",
+    "eventos_totales": 7200,
+    "eps": 2,
+    "fecha": "2026-03-20T14:35:10.123456",
+    "dia": "2026-03-20",
+    "hora": "14:00"
+}
+```
+
+Tipos almacenados:
+
+- `cliente`: string
+- `eventos_totales`: int
+- `eps`: int
+- `fecha`: BSON Date en MongoDB (en el ejemplo se muestra como texto ISO solo para lectura)
+- `dia`: string
+- `hora`: string
+
 ## Prueba con TXT (opcional)
 
 Para validar facilmente la salida antes de productivo:
