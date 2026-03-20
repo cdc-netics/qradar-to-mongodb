@@ -82,6 +82,30 @@ sudo systemctl enable qradar-to-mongodb
 sudo systemctl start qradar-to-mongodb
 ```
 
+### Pasos exactos recomendados (ruta /opt)
+
+```bash
+cd /opt/qradar-to-mongodb
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+nano .env
+sudo cp /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable qradar-to-mongodb
+sudo systemctl start qradar-to-mongodb
+```
+
+Validaciones previas importantes:
+
+```bash
+ls -l /opt/qradar-to-mongodb/.venv/bin/python
+ls -l /opt/qradar-to-mongodb/.env
+ls -l /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service
+```
+
 Comandos utiles:
 
 ```bash
@@ -89,9 +113,49 @@ sudo systemctl status qradar-to-mongodb
 sudo journalctl -u qradar-to-mongodb -f
 ```
 
+Si falla el arranque, revisar:
+
+- Usuario/grupo del servicio (`User=` y `Group=`) existentes en el sistema.
+- Rutas correctas en `WorkingDirectory`, `EnvironmentFile` y `ExecStart`.
+- Credenciales MongoDB validas en `.env`.
+- Permisos de lectura sobre `.env` y ejecucion sobre `.venv/bin/python`.
+
 ## 9. Recomendaciones operativas Linux
 
 - Crear usuario de servicio sin privilegios de root.
 - Proteger `.env` con permisos restrictivos: `chmod 600 .env`.
 - Evitar `verify=False` en ambientes productivos. Se recomienda configurar TLS con certificados validos en QRadar.
 - Si se requiere ejecucion periodica, usar systemd timer o cron.
+
+## 10. Instalador automatico
+
+Para evitar errores manuales, ejecutar:
+
+```bash
+cd /opt/qradar-to-mongodb
+chmod +x scripts/install_service.sh
+sudo ./scripts/install_service.sh
+```
+
+El script muestra menu para elegir instalacion o desinstalacion segura.
+
+Tambien puedes usar modo no interactivo:
+
+```bash
+sudo ./scripts/install_service.sh install
+sudo ./scripts/install_service.sh uninstall
+```
+
+Este script:
+
+- Prepara `.venv` e instala dependencias.
+- Crea `.env` desde `.env.example` si falta.
+- Ajusta permisos de `.env`.
+- Crea/actualiza el servicio systemd.
+- Habilita y reinicia el servicio.
+
+Parametros opcionales:
+
+```bash
+sudo APP_DIR=/opt/qradar-to-mongodb SERVICE_USER=<linux_user> SERVICE_GROUP=<linux_group> ./scripts/install_service.sh install
+```

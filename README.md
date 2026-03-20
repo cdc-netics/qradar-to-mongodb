@@ -131,6 +131,89 @@ Comportamiento de ejecucion:
 
 La guia detallada de despliegue Linux esta en `LINUX_SETUP.md`.
 
+## Levantar Servicio En Linux (Paso A Paso)
+
+Ejemplo asumiendo proyecto en `/opt/qradar-to-mongodb`.
+
+1. Preparar entorno y dependencias:
+
+```bash
+cd /opt/qradar-to-mongodb
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+1. Editar `.env` con tus valores reales (QRadar, Mongo y scheduler).
+
+1. Validar que las rutas esperadas existen:
+
+```bash
+ls -l /opt/qradar-to-mongodb/.venv/bin/python
+ls -l /opt/qradar-to-mongodb/.env
+ls -l /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service
+```
+
+1. Instalar y activar el servicio systemd:
+
+```bash
+sudo cp /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable qradar-to-mongodb
+sudo systemctl start qradar-to-mongodb
+```
+
+1. Verificar estado y logs:
+
+```bash
+sudo systemctl status qradar-to-mongodb
+sudo journalctl -u qradar-to-mongodb -f
+```
+
+Si no inicia, revisar:
+
+- Que el usuario del servicio exista (`User=` y `Group=` en el .service).
+- Que `WorkingDirectory` y `ExecStart` apunten a `/opt/qradar-to-mongodb`.
+- Que `.env` tenga credenciales validas de MongoDB.
+
+## Instalacion Automatizada (Script .sh)
+
+Tambien puedes automatizar todo con el instalador:
+
+```bash
+cd /opt/qradar-to-mongodb
+chmod +x scripts/install_service.sh
+sudo ./scripts/install_service.sh
+```
+
+Al ejecutarlo sin parametros muestra menu para elegir:
+
+- `Install / Update service`
+- `Safe uninstall service`
+
+Modo no interactivo:
+
+```bash
+sudo ./scripts/install_service.sh install
+sudo ./scripts/install_service.sh uninstall
+```
+
+Que hace automaticamente:
+
+- Crea/actualiza `.venv`.
+- Instala dependencias desde `requirements.txt`.
+- Crea `.env` desde `.env.example` si no existe.
+- Genera `/etc/systemd/system/qradar-to-mongodb.service`.
+- Ejecuta `daemon-reload`, `enable` y `restart` del servicio.
+
+Si necesitas valores custom:
+
+```bash
+sudo APP_DIR=/opt/qradar-to-mongodb SERVICE_USER=<linux_user> SERVICE_GROUP=<linux_group> ./scripts/install_service.sh install
+```
+
 ## Flujo
 
 1. Construye una consulta AQL por dominio.
