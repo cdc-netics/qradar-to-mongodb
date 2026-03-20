@@ -202,21 +202,17 @@ uninstall_flow() {
   warn "Application files in ${APP_DIR} will NOT be deleted."
 
   local confirm
-  read -r -p "Type UNINSTALL to continue: " confirm
-  if [[ "$confirm" != "UNINSTALL" ]]; then
+  read -r -p "Are you sure you want to uninstall? (y/N): " confirm
+  if [[ ! "$confirm" =~ ^[yY]$ ]]; then
     warn "Uninstall canceled by user."
     exit 0
   fi
 
-  if systemctl list-unit-files | grep -q "^${SERVICE_NAME}\.service"; then
-    log "Stopping service..."
-    systemctl stop "$SERVICE_NAME" || true
+  log "Stopping service..."
+  systemctl stop "$SERVICE_NAME" || true
 
-    log "Disabling service..."
-    systemctl disable "$SERVICE_NAME" || true
-  else
-    warn "Service ${SERVICE_NAME}.service not found in systemd registry."
-  fi
+  log "Disabling service..."
+  systemctl disable "$SERVICE_NAME" || true
 
   if [[ -f "$UNIT_FILE" ]]; then
     log "Removing unit file: $UNIT_FILE"
