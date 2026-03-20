@@ -10,6 +10,12 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 
 - Soporte dual para credenciales MongoDB: usa MONGO_URI si existe, o construye URI desde variables separadas.
 - Documentacion y env example actualizados con variables MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_AUTH_SOURCE y MONGO_PARAMS.
+- Modo continuo de ejecucion mediante RUN_CONTINUOUS y RUN_INTERVAL_SECONDS.
+- Documentacion Linux actualizada para ejecucion permanente.
+
+### Added (Unreleased)
+
+- Plantilla de servicio systemd en deploy/systemd/qradar-to-mongodb.service.
 
 ## [0.1.0-beta.1] - 2026-03-20
 

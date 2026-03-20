@@ -60,6 +60,8 @@ cp .env.example .env
 | `REQUEST_TIMEOUT` | Timeout HTTP para QRadar en segundos | `30` |
 | `POLL_INTERVAL_SECONDS` | Espera entre consultas de estado | `2` |
 | `MAX_POLL_ATTEMPTS` | Maximo de intentos de polling | `120` |
+| `RUN_CONTINUOUS` | Ejecuta el script en bucle continuo | `true` |
+| `RUN_INTERVAL_SECONDS` | Espera entre corridas en modo continuo | `3600` |
 | `DEBUG_EXPORT_TXT` | Exporta salida de prueba a TXT (`true`/`false`) | `false` |
 | `DEBUG_TXT_FILE` | Nombre del archivo TXT de debug | `debug_qradar_output.txt` |
 
@@ -118,6 +120,12 @@ Para productivo, dejar `DEBUG_EXPORT_TXT=false`.
 ```bash
 python3 qradar-to-mongodb.py
 ```
+
+Comportamiento de ejecucion:
+
+- Si `RUN_CONTINUOUS=false`, ejecuta una sola vez.
+- Si `RUN_CONTINUOUS=true`, ejecuta en bucle y espera `RUN_INTERVAL_SECONDS` entre corridas.
+- Si no defines `RUN_INTERVAL_SECONDS`, usa `MINUTOS_INTERVALO * 60`.
 
 ## Linux
 

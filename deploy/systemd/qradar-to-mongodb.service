@@ -1,0 +1,18 @@
+[Unit]
+Description=QRadar to MongoDB Sync Service
+After=network.target
+
+[Service]
+Type=simple
+User=qradar
+Group=qradar
+WorkingDirectory=/opt/qradar-to-mongodb
+EnvironmentFile=/opt/qradar-to-mongodb/.env
+ExecStart=/opt/qradar-to-mongodb/.venv/bin/python /opt/qradar-to-mongodb/qradar-to-mongodb.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

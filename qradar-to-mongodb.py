@@ -45,6 +45,12 @@ MINUTOS_INTERVALO = int(os.getenv("MINUTOS_INTERVALO", 60))
 DEBUG_EXPORT_TXT = os.getenv("DEBUG_EXPORT_TXT", "false").strip().lower() == "true"
 DEBUG_TXT_FILE = os.getenv("DEBUG_TXT_FILE", "debug_qradar_output.txt")
 
+# Modo de ejecucion continua.
+# Si RUN_CONTINUOUS=true, el script corre en bucle y consulta cada RUN_INTERVAL_SECONDS.
+# Si RUN_INTERVAL_SECONDS no se define, usa MINUTOS_INTERVALO * 60.
+RUN_CONTINUOUS = os.getenv("RUN_CONTINUOUS", "false").strip().lower() == "true"
+RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", MINUTOS_INTERVALO * 60))
+
 # El script hoy consulta con verify=False, por eso se silencian warnings TLS.
 # Nota: en produccion es mejor usar certificados validos y verify=True.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -249,6 +255,25 @@ def sync_qradar_to_mongo():
         print(f"Error: {e}")
 
 
+def run_scheduler():
+    # Modo una sola ejecucion para pruebas/manual.
+    if not RUN_CONTINUOUS:
+        sync_qradar_to_mongo()
+        return
+
+    if RUN_INTERVAL_SECONDS <= 0:
+        raise ValueError("RUN_INTERVAL_SECONDS debe ser mayor que 0")
+
+    print(
+        f"Modo continuo habilitado. Intervalo entre ejecuciones: {RUN_INTERVAL_SECONDS} segundos."
+    )
+
+    while True:
+        sync_qradar_to_mongo()
+        print(f"Esperando {RUN_INTERVAL_SECONDS} segundos para la siguiente ejecucion...")
+        time.sleep(RUN_INTERVAL_SECONDS)
+
+
 # Punto de entrada cuando el archivo se ejecuta como script directo.
 if __name__ == "__main__":
-    sync_qradar_to_mongo()
+    run_scheduler()

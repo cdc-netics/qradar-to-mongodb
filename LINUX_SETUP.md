@@ -49,7 +49,7 @@ python3 qradar-to-mongodb.py
 
 - `QRADAR_IP`
 - `QRADAR_TOKEN`
-- `MONGO_URI`
+- `MONGO_URI` o `MONGO_HOST`
 - `MONGO_DB`
 - `MONGO_COLLECTION`
 
@@ -59,8 +59,37 @@ python3 qradar-to-mongodb.py
 - `REQUEST_TIMEOUT` (default: `30` segundos)
 - `POLL_INTERVAL_SECONDS` (default: `2`)
 - `MAX_POLL_ATTEMPTS` (default: `120`)
+- `RUN_CONTINUOUS` (default: `false`)
+- `RUN_INTERVAL_SECONDS` (default: `MINUTOS_INTERVALO * 60`)
 
-## 8. Recomendaciones operativas Linux
+## 8. Ejecucion continua
+
+En `.env` habilita:
+
+```dotenv
+RUN_CONTINUOUS=true
+RUN_INTERVAL_SECONDS=3600
+```
+
+Con eso el script se mantiene en bucle y ejecuta una consulta por cada intervalo.
+
+Para dejarlo siempre activo tras reinicio del servidor, usar systemd:
+
+```bash
+sudo cp deploy/systemd/qradar-to-mongodb.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable qradar-to-mongodb
+sudo systemctl start qradar-to-mongodb
+```
+
+Comandos utiles:
+
+```bash
+sudo systemctl status qradar-to-mongodb
+sudo journalctl -u qradar-to-mongodb -f
+```
+
+## 9. Recomendaciones operativas Linux
 
 - Crear usuario de servicio sin privilegios de root.
 - Proteger `.env` con permisos restrictivos: `chmod 600 .env`.
