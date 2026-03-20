@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
+# =============================================================================
+# QRadar to MongoDB - Service Installer & Manager
+# =============================================================================
+# Este script automatiza el despliegue del servicio en sistemas Linux.
+# Realiza las siguientes tareas:
+# 1. Valida dependencias del sistema.
+# 2. Prepara un entorno virtual (venv) de Python.
+# 3. Instala las dependencias listadas en requirements.txt.
+# 4. Configura el archivo de entorno .env.
+# 5. Genera y activa una unidad de systemd para ejecución automática.
+# =============================================================================
+
 set -euo pipefail
 
-# Automated installer for qradar-to-mongodb service on Linux.
-# It prepares venv, installs dependencies, creates systemd unit, enables and starts service.
-
+# --- CONFIGURACIÓN POR DEFECTO ---
 SERVICE_NAME="qradar-to-mongodb"
 APP_DIR="${APP_DIR:-/opt/qradar-to-mongodb}"
+# Intenta obtener el usuario que ejecutó sudo, si no, usa el usuario actual.
 SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$(id -un)}}"
 SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 SELECTED_ACTION=""
 
+# --- FUNCIONES DE LOGGING ---
 log() {
   printf "[INFO] %s\n" "$*"
 }
@@ -24,123 +36,133 @@ err() {
   printf "[ERROR] %s\n" "$*" >&2
 }
 
+# --- VALIDACIONES INICIALES ---
+
+# Verifica que un comando necesario esté instalado en el sistema.
 require_cmd() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    err "Missing required command: $cmd"
+    err "Comando no encontrado: $cmd. Por favor instálelo antes de continuar."
     exit 1
   fi
 }
 
+# Asegura que el script se ejecute con privilegios de root (necesario para systemd).
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    err "Run as root (or with sudo)."
+    err "Este script debe ejecutarse como root (use sudo)."
     exit 1
   fi
 }
 
+# Valida que el usuario y grupo definidos existan en el sistema Linux.
 validate_service_identity() {
   if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-    err "Service user does not exist: $SERVICE_USER"
+    err "El usuario de servicio no existe: $SERVICE_USER"
     exit 1
   fi
 
   if ! getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
-    err "Service group does not exist: $SERVICE_GROUP"
+    err "El grupo de servicio no existe: $SERVICE_GROUP"
     exit 1
   fi
 }
 
+# Muestra el encabezado principal y el resumen de configuración.
 show_program_info() {
   cat <<EOF
 =============================================
- QRadar to MongoDB - Service Manager
+ QRadar to MongoDB - Gestor de Servicio
 =============================================
-Service name : ${SERVICE_NAME}
-App directory: ${APP_DIR}
-Service user : ${SERVICE_USER}
-Service group: ${SERVICE_GROUP}
-Python bin   : ${PYTHON_BIN}
+Nombre servicio: ${SERVICE_NAME}
+Directorio app : ${APP_DIR}
+Usuario        : ${SERVICE_USER}
+Grupo          : ${SERVICE_GROUP}
+Binario Python : ${PYTHON_BIN}
 
-Actions:
-  install   -> prepare venv, dependencies, .env, systemd and start service
-  repair    -> fix .env permissions, rewrite systemd unit and restart service
-  uninstall -> stop/disable service and remove systemd unit safely
+Acciones disponibles:
+  1) install   -> Prepara venv, dependencias, .env, systemd y arranca el servicio.
+  2) repair    -> Corrige permisos de .env, reescribe el unit file y reinicia.
+  3) uninstall -> Detiene/desactiva el servicio y elimina el unit file de forma segura.
 EOF
 }
 
+# Verifica que los archivos críticos del proyecto estén presentes en el APP_DIR.
 check_paths() {
   if [[ ! -d "$APP_DIR" ]]; then
-    err "Application directory not found: $APP_DIR"
+    err "Directorio de aplicación no encontrado: $APP_DIR"
     exit 1
   fi
 
   if [[ ! -f "$APP_DIR/qradar-to-mongodb.py" ]]; then
-    err "Main script not found: $APP_DIR/qradar-to-mongodb.py"
+    err "Script principal no encontrado: $APP_DIR/qradar-to-mongodb.py"
     exit 1
   fi
 
   if [[ ! -f "$APP_DIR/requirements.txt" ]]; then
-    err "requirements.txt not found in $APP_DIR"
+    err "requirements.txt no encontrado en $APP_DIR"
     exit 1
   fi
 }
 
+# --- FLUJOS DE TRABAJO ---
+
+# Configura el Virtual Environment de Python para aislar dependencias.
 setup_venv() {
-  log "Preparing Python virtual environment..."
+  log "Configurando entorno virtual (venv)..."
   if [[ ! -d "$APP_DIR/.venv" ]]; then
     "$PYTHON_BIN" -m venv "$APP_DIR/.venv"
   fi
 
+  log "Actualizando pip e instalando dependencias..."
   "$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
   "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 }
 
+# Gestiona la creación inicial del archivo .env y sus permisos.
 setup_env_file() {
   if [[ ! -f "$APP_DIR/.env" ]]; then
     if [[ -f "$APP_DIR/.env.example" ]]; then
+      log "Creando .env desde .env.example..."
       cp "$APP_DIR/.env.example" "$APP_DIR/.env"
-      warn "Created $APP_DIR/.env from .env.example. Please edit with real values."
+      warn "¡IMPORTANTE! Edite $APP_DIR/.env con sus credenciales reales."
     else
-      err "Missing both .env and .env.example in $APP_DIR"
+      err "No se encontró .env ni .env.example en $APP_DIR"
       exit 1
     fi
   fi
 
-  # Ensure the runtime service user can read the environment file.
+  # Asegura que solo el usuario del servicio (y root) puedan leer el archivo de secretos.
   chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
   chmod 640 "$APP_DIR/.env"
 }
 
+# Corrige permisos de .env (útil si se copiaron archivos como root manualmente).
 repair_env_permissions() {
   if [[ ! -f "$APP_DIR/.env" ]]; then
-    warn ".env not found. Recreating from .env.example..."
-    if [[ -f "$APP_DIR/.env.example" ]]; then
-      cp "$APP_DIR/.env.example" "$APP_DIR/.env"
-      warn "Created $APP_DIR/.env from .env.example. Please edit with real values."
-    else
-      err "Missing both .env and .env.example in $APP_DIR"
-      exit 1
-    fi
+    warn ".env no encontrado. Reintentando creación desde .env.example..."
+    setup_env_file
+  else
+    log "Corrigiendo owner y permisos para .env"
+    chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
+    chmod 640 "$APP_DIR/.env"
   fi
-
-  log "Fixing ownership and permissions for .env"
-  chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
-  chmod 640 "$APP_DIR/.env"
 }
 
+# Escanea el .env buscando valores de ejemplo que aún no han sido cambiados.
 validate_env_placeholders() {
   if grep -q "replace-with-qradar-token" "$APP_DIR/.env"; then
-    warn "QRADAR_TOKEN still has placeholder value."
+    warn "Detectado placeholder en QRADAR_TOKEN. El servicio fallará hasta que lo cambie."
   fi
 
   if grep -q "^MONGO_PASSWORD=$" "$APP_DIR/.env"; then
-    warn "MONGO_PASSWORD is empty in .env"
+    warn "MONGO_PASSWORD parece estar vacío en el archivo .env."
   fi
 }
 
+# Genera el archivo de unidad de systemd con las rutas dinámicas detectadas.
 write_systemd_unit() {
-  log "Writing systemd unit: $UNIT_FILE"
+  log "Generando unidad systemd en: $UNIT_FILE"
   cat > "$UNIT_FILE" <<EOF
 [Unit]
 Description=QRadar to MongoDB Sync Service
@@ -163,29 +185,36 @@ WantedBy=multi-user.target
 EOF
 }
 
+# Realiza el despliegue efectivo en systemd.
 enable_service() {
-  log "Reloading systemd and enabling service..."
+  log "Recargando daemon de systemd y habilitando servicio..."
   systemctl daemon-reload
   systemctl enable "$SERVICE_NAME"
+  log "Reiniciando servicio..."
   systemctl restart "$SERVICE_NAME"
 }
 
+# Muestra el estado final y comandos útiles al usuario.
 show_status() {
-  log "Service status summary:"
+  log "Resumen del estado del servicio:"
   systemctl --no-pager --full status "$SERVICE_NAME" || true
 
   cat <<MSG
 
-Done. Useful commands:
-  sudo systemctl status ${SERVICE_NAME}
-  sudo journalctl -u ${SERVICE_NAME} -f
-  sudo systemctl restart ${SERVICE_NAME}
+¡Proceso completado con éxito!
+Comandos útiles para administración:
+  - Ver estado:    sudo systemctl status ${SERVICE_NAME}
+  - Ver logs:      sudo journalctl -u ${SERVICE_NAME} -f
+  - Reiniciar:     sudo systemctl restart ${SERVICE_NAME}
+  - Detener:       sudo systemctl stop ${SERVICE_NAME}
 
-If needed, run with custom values:
-  sudo APP_DIR=/opt/qradar-to-mongodb SERVICE_USER=<linux_user> SERVICE_GROUP=<linux_group> ./scripts/install_service.sh
+Configuración avanzada:
+  Puede ejecutar este script con variables personalizadas:
+  sudo APP_DIR=/ruta/custom SERVICE_USER=usuario ./scripts/install_service.sh install
 MSG
 }
 
+# Orquestador del flujo de instalación completa.
 install_flow() {
   check_paths
   setup_venv
@@ -196,64 +225,69 @@ install_flow() {
   show_status
 }
 
+# Orquestador del flujo de desinstalación.
 uninstall_flow() {
-  log "Safe uninstall selected for service: ${SERVICE_NAME}"
-  warn "This will stop/disable the service and remove ${UNIT_FILE}."
-  warn "Application files in ${APP_DIR} will NOT be deleted."
+  log "Desinstalación segura iniciada para: ${SERVICE_NAME}"
+  cat <<WARN
+[ADVERTENCIA]
+Esto detendrá el servicio, lo deshabilitará y eliminará el archivo $UNIT_FILE.
+Los archivos en $APP_DIR (código, .env, venv) se mantendrán intactos.
+WARN
 
   local confirm
-  read -r -p "Are you sure you want to uninstall? (y/N): " confirm
+  read -r -p "¿Está seguro de que desea desinstalar? (y/N): " confirm
   if [[ ! "$confirm" =~ ^[yY]$ ]]; then
-    warn "Uninstall canceled by user."
+    warn "Desinstalación cancelada por el usuario."
     exit 0
   fi
 
-  log "Stopping service..."
+  # Detener y deshabilitar de forma proactiva.
+  log "Deteniendo servicio..."
   systemctl stop "$SERVICE_NAME" || true
 
-  log "Disabling service..."
+  log "Deshabilitando servicio de systemd..."
   systemctl disable "$SERVICE_NAME" || true
 
+  # Limpiar el archivo de unidad para que no aparezca en 'systemctl list-units'.
   if [[ -f "$UNIT_FILE" ]]; then
-    log "Removing unit file: $UNIT_FILE"
+    log "Eliminando archivo de unidad: $UNIT_FILE"
     rm -f "$UNIT_FILE"
-  else
-    warn "Unit file does not exist: $UNIT_FILE"
   fi
 
+  # Refrescar systemd para que reconozca que el servicio ya no existe.
   systemctl daemon-reload
-  log "Safe uninstall complete. Application directory preserved: ${APP_DIR}"
+  log "Desinstalación completada. El directorio de la aplicación se ha preservado."
 }
 
+# Orquestador para reparar instalaciones rotas (permisos o rutas).
 repair_flow() {
   check_paths
 
   if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
-    warn "Virtualenv python not found at $APP_DIR/.venv/bin/python"
-    warn "Run install action first if dependencies are missing."
+    warn "No se encontró el ejecutable de Python en el venv."
+    warn "Se recomienda ejecutar la acción 'install' para reconstruir dependencias."
   fi
 
   repair_env_permissions
   validate_env_placeholders
   write_systemd_unit
-
-  log "Reloading systemd and restarting service..."
-  systemctl daemon-reload
-  systemctl enable "$SERVICE_NAME"
-  systemctl restart "$SERVICE_NAME"
+  enable_service
   show_status
 }
 
+# --- MANEJO DE ENTRADA Y ARGUMENTOS ---
+
+# Menú interactivo si el script se llama sin argumentos.
 prompt_action() {
   local choice
   local normalized
 
   while true; do
-    printf "\nChoose an action:\n" >&2
-    printf "  1) Install / Update service\n" >&2
-    printf "  2) Repair runtime/service (safe)\n" >&2
-    printf "  3) Safe uninstall service\n" >&2
-    read -r -p "Selection [1/2/3]: " choice
+    printf "\nSeleccione una acción:\n" >&2
+    printf "  1) Instalar / Actualizar servicio\n" >&2
+    printf "  2) Reparar permisos/servicio (Seguro)\n" >&2
+    printf "  3) Desinstalar servicio (Seguro)\n" >&2
+    read -r -p "Opción [1/2/3]: " choice
 
     normalized="$(normalize_action "$choice")"
     if [[ -n "$normalized" ]]; then
@@ -261,39 +295,35 @@ prompt_action() {
       return
     fi
 
-    err "Invalid selection: $choice"
+    err "Opción inválida: $choice"
   done
 }
 
+# Normaliza la entrada del usuario a términos internos (install, repair, uninstall).
 normalize_action() {
   local input_action="$1"
   local normalized
 
-  # Trim leading/trailing spaces.
+  # Limpiar espacios en blanco.
   input_action="${input_action#"${input_action%%[![:space:]]*}"}"
   input_action="${input_action%"${input_action##*[![:space:]]}"}"
 
-  # Normalize to lowercase for matching.
+  # Convertir a minúsculas.
   normalized="${input_action,,}"
 
   case "$normalized" in
-    1|install)
-      echo "install"
-      ;;
-    2|repair)
-      echo "repair"
-      ;;
-    3|uninstall)
-      echo "uninstall"
-      ;;
-    *)
-      echo ""
-      ;;
+    1|install)   echo "install" ;;
+    2|repair)    echo "repair" ;;
+    3|uninstall) echo "uninstall" ;;
+    *)           echo "" ;;
   esac
 }
 
+# Punto de entrada principal (Main).
 main() {
   show_program_info
+  
+  # Validaciones previas de entorno root y herramientas necesarias.
   require_root
   require_cmd "$PYTHON_BIN"
   require_cmd systemctl
@@ -307,6 +337,7 @@ main() {
   local raw_action="${1:-}"
   local action
 
+  # Si no hay argumentos, preguntar al usuario.
   if [[ -z "$raw_action" ]]; then
     prompt_action
     raw_action="$SELECTED_ACTION"
@@ -315,21 +346,16 @@ main() {
   action="$(normalize_action "$raw_action")"
 
   case "$action" in
-    install)
-      install_flow
-      ;;
-    repair)
-      repair_flow
-      ;;
-    uninstall)
-      uninstall_flow
-      ;;
+    install)   install_flow ;;
+    repair)    repair_flow ;;
+    uninstall) uninstall_flow ;;
     *)
-      err "Unknown action: $raw_action"
-      err "Use: ./scripts/install_service.sh [install|repair|uninstall|1|2|3]"
+      err "Acción desconocida: $raw_action"
+      err "Uso: sudo $0 [install|repair|uninstall|1|2|3]"
       exit 1
       ;;
   esac
 }
 
+# Ejecutar el script.
 main "$@"

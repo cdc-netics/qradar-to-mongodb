@@ -9,25 +9,31 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-# Carga variables definidas en .env al entorno del proceso.
-# Si una variable ya existe en el entorno del sistema, se respeta ese valor.
+# =============================================================================
+# CONFIGURACIÓN Y VARIABLES DE ENTORNO
+# =============================================================================
+
+# Carga variables definidas en el archivo .env al entorno del proceso actual.
+# Load values from .env file into environment variables.
 load_dotenv()
 
-# Tiempo maximo (segundos) para cada request HTTP hacia QRadar.
-# Evita que el proceso quede bloqueado indefinidamente por problemas de red.
+# Tiempo máximo (segundos) para cada request HTTP hacia la API de QRadar.
+# Ayuda a evitar que el script quede colgado por problemas de red persistentes.
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", 30))
 
-# Espera (segundos) entre cada consulta de estado del search en QRadar.
+# Intervalo de espera (en segundos) entre cada consulta de estado (polling) 
+# mientras QRadar procesa la búsqueda Ariel.
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", 2))
 
-# Limite de intentos de polling para cortar busquedas que nunca terminan.
+# Límite máximo de intentos de polling. Si la búsqueda no termina tras este 
+# número de intentos, el script asume un error o demora excesiva y aborta.
 MAX_POLL_ATTEMPTS = int(os.getenv("MAX_POLL_ATTEMPTS", 120))
 
-# Parametros de conexion a QRadar.
+# Parámetros críticos para conectar con la consola de QRadar.
 QRADAR_IP = os.getenv("QRADAR_IP")
-SEC_TOKEN = os.getenv("QRADAR_TOKEN")
+SEC_TOKEN = os.getenv("QRADAR_TOKEN")  # Security Token (SEC) generado en QRadar.
 
-# Parametros de conexion y destino en MongoDB.
+# Configuración de destino en MongoDB (URI o componentes separados).
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_HOST = os.getenv("MONGO_HOST")
 MONGO_PORT = os.getenv("MONGO_PORT", "27017")
@@ -38,31 +44,33 @@ MONGO_PARAMS = os.getenv("MONGO_PARAMS")
 DB_NAME = os.getenv("MONGO_DB")
 COLLECTION_NAME = os.getenv("MONGO_COLLECTION")
 
-# Ventana de tiempo (en minutos) usada por la consulta AQL.
+# Ventana de tiempo (en minutos) que se usará en la cláusula LAST de la query AQL.
 MINUTOS_INTERVALO = int(os.getenv("MINUTOS_INTERVALO", 60))
 
-# Zona horaria de referencia para campos de fecha/hora de negocio.
-# Por defecto se usa horario de Chile.
+# Zona horaria para los campos 'dia' y 'hora' que se guardan en el documento.
+# Esto permite que los reportes en MongoDB coincidan con el horario local de negocio.
 APP_TIMEZONE = os.getenv("APP_TIMEZONE", "America/Santiago")
 
-# Controla si se genera un TXT de prueba por cada corrida.
-# En productivo dejar en false para deshabilitarlo facilmente.
+# Opciones de depuración (Debug). Habilitan la exportación de resultados a un archivo TXT plano.
 DEBUG_EXPORT_TXT = os.getenv("DEBUG_EXPORT_TXT", "false").strip().lower() == "true"
 DEBUG_TXT_FILE = os.getenv("DEBUG_TXT_FILE", "debug_qradar_output.txt")
 
-# Modo de ejecucion continua.
-# Si RUN_CONTINUOUS=true, el script corre en bucle y consulta cada RUN_INTERVAL_SECONDS.
-# Si RUN_INTERVAL_SECONDS no se define, usa MINUTOS_INTERVALO * 60.
+# Control de ejecución continua (Daemon mode).
+# Si es true, el script entra en un bucle infinito consultando periódicamente.
 RUN_CONTINUOUS = os.getenv("RUN_CONTINUOUS", "false").strip().lower() == "true"
+# Tiempo entre ejecuciones completas (el ciclo completo de QRadar -> Mongo).
 RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", MINUTOS_INTERVALO * 60))
 
-# El script hoy consulta con verify=False, por eso se silencian warnings TLS.
-# Nota: en produccion es mejor usar certificados validos y verify=True.
+# Silenciar advertencias de certificados auto-firmados o inválidos (InsecureRequestWarning).
+# IMPORTANTE: En producción, use certificados válidos y cambie verify=False a True.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def validate_required_env():
-    # Diccionario de variables obligatorias para que el script funcione.
+    """
+    Verifica que las variables de entorno esenciales estén presentes.
+    Lanza ValueError si falta información crítica antes de iniciar el proceso.
+    """
     required = {
         "QRADAR_IP": QRADAR_IP,
         "QRADAR_TOKEN": SEC_TOKEN,
@@ -70,27 +78,29 @@ def validate_required_env():
         "MONGO_COLLECTION": COLLECTION_NAME,
     }
 
-    # Se identifica cuales vienen vacias o no definidas.
+    # Identificar claves nulas o vacías.
     missing = [key for key, value in required.items() if not value]
 
-    # Si falta alguna, se aborta antes de hacer llamadas remotas.
     if missing:
         raise ValueError(f"Faltan variables de entorno requeridas: {', '.join(missing)}")
 
-    # Valida credenciales de Mongo por cualquiera de los dos modos soportados.
+    # Validar también que la configuración de MongoDB sea coherente.
     get_mongo_uri()
 
 
 def get_mongo_uri():
-    # Si hay usuario/password definidos, se prioriza modo por variables separadas.
-    # Esto evita errores cuando MONGO_URI apunta a localhost sin auth.
+    """
+    Resuelve la cadena de conexión a MongoDB basándose en las variables de entorno.
+    Soporta URI completa (MONGO_URI) o construcción por piezas (USER, PASS, HOST, etc).
+    """
+    # Si existen credenciales explícitas, se prioriza el modo manual para asegurar auth.
     use_separate_credentials = bool(MONGO_USER or MONGO_PASSWORD)
 
-    # Modo 1 (preferido): URI completa provista por entorno.
+    # Caso 1: URI completa provista (ej: mongodb+srv://...)
     if MONGO_URI and not use_separate_credentials:
         return MONGO_URI
 
-    # Modo 2: construccion desde variables separadas.
+    # Caso 2: Construcción manual dinámica.
     if not MONGO_HOST:
         raise ValueError("Debe definir MONGO_URI o MONGO_HOST para conectar a MongoDB")
 
@@ -99,6 +109,7 @@ def get_mongo_uri():
 
     auth_part = ""
     if MONGO_USER and MONGO_PASSWORD:
+        # quote_plus asegura que caracteres especiales en el password no rompan la URI.
         auth_part = f"{quote_plus(MONGO_USER)}:{quote_plus(MONGO_PASSWORD)}@"
 
     query_parts = []
@@ -112,72 +123,95 @@ def get_mongo_uri():
 
 
 def request_json(response):
-    # Si QRadar responde 4xx/5xx, se lanza excepcion inmediatamente.
+    """
+    Wrapper para procesar respuestas de la API de QRadar.
+    Lanza excepción si el código HTTP es 4xx o 5xx.
+    """
     response.raise_for_status()
-
-    # Devuelve el body parseado como JSON para consumo del flujo principal.
     return response.json()
 
 
 def calculate_eps(total_eventos, minutos_intervalo):
-    # Convierte la ventana de minutos a segundos para obtener EPS real.
+    """
+    Calcula el promedio de Eventos Por Segundo (EPS) basado en el total de eventos
+    detectados en una ventana de tiempo específica.
+    """
     segundos_ventana = minutos_intervalo * 60
     if segundos_ventana <= 0:
         raise ValueError("MINUTOS_INTERVALO debe ser mayor que 0")
 
-    # EPS entero: se redondea al entero mas cercano.
-    # Si el resultado es 0, se fuerza a 1 por requisito operativo.
-    eps_entero = int(round(total_eventos / segundos_ventana))
+    # EPS = Total de eventos / Segundos totales de la ventana.
+    eps_decimal = total_eventos / segundos_ventana
+    
+    # Redondeo al entero más cercano.
+    eps_entero = int(round(eps_decimal))
+    
+    # REGLA OPERATIVA: El EPS mínimo registrado siempre debe ser 1 si hubo eventos,
+    # para evitar que dominios con muy poca carga desaparezcan del monitoreo.
     return max(1, eps_entero)
 
 
 def export_debug_txt(documentos):
-    # Export opcional de los documentos para validar rapidamente salida.
-    # Cada linea se escribe en JSON para facilitar lectura y diff.
+    """
+    Exporta los documentos generados a un archivo de texto plano para validación manual.
+    Solo se ejecuta si DEBUG_EXPORT_TXT=true.
+    """
     if not DEBUG_EXPORT_TXT:
         return
 
-    with open(DEBUG_TXT_FILE, "w", encoding="utf-8") as f:
-        for doc in documentos:
-            doc_copy = doc.copy()
-            if isinstance(doc_copy.get("fecha"), datetime):
-                doc_copy["fecha"] = doc_copy["fecha"].isoformat()
-            f.write(json.dumps(doc_copy, ensure_ascii=True) + "\n")
+    try:
+        with open(DEBUG_TXT_FILE, "w", encoding="utf-8") as f:
+            for doc in documentos:
+                doc_copy = doc.copy()
+                # Serializar objetos datetime a string para el JSON de salida.
+                if isinstance(doc_copy.get("fecha"), datetime):
+                    doc_copy["fecha"] = doc_copy["fecha"].isoformat()
+                f.write(json.dumps(doc_copy, ensure_ascii=True) + "\n")
+    except Exception as e:
+        print(f"[DEBUG] Error exportando archivo TXT: {e}")
 
 
 def get_time_context():
+    """
+    Genera marcas de tiempo tanto en UTC (para MongoDB) como en Hora Local 
+    (para campos de negocio y reportes).
+    """
     try:
         tz = ZoneInfo(APP_TIMEZONE)
     except Exception as exc:
-        raise ValueError(f"Zona horaria invalida en APP_TIMEZONE: {APP_TIMEZONE}") from exc
+        raise ValueError(f"Zona horaria inválida en APP_TIMEZONE: {APP_TIMEZONE}") from exc
 
-    # Se guarda fecha en UTC para consistencia tecnica en Mongo.
-    # Campos dia/hora/hora_minuto se calculan en timezone de negocio (Chile por defecto).
     now_utc = datetime.now(timezone.utc)
+    # Conversión a la zona horaria definida (Chile por defecto).
     now_local = now_utc.astimezone(tz)
     return now_utc, now_local
 
 
 def sync_qradar_to_mongo():
-    # Validacion temprana para evitar errores ambiguos mas adelante.
+    """
+    FLUJO PRINCIPAL:
+    1. Ejecuta consulta AQL en QRadar Ariel API.
+    2. Monitorea el estado de la búsqueda hasta que finalice.
+    3. Obtiene los resultados de eventos por dominio.
+    4. Procesa y transforma los datos al esquema de MongoDB.
+    5. Inserta en lote (batch) los documentos en la base de datos.
+    """
     validate_required_env()
-
     mongo_uri = get_mongo_uri()
 
-    # 1) Consulta AQL: cuenta eventos por dominio en una ventana de tiempo.
-    #    metric  -> nombre del dominio
-    #    value   -> total de eventos para ese dominio
-    aql_query = f"SELECT DOMAINNAME(domainid) AS metric, LONG(COUNT(*)) AS value FROM events GROUP BY domainid LAST {MINUTOS_INTERVALO} MINUTES"
+    # QUERY AQL: Agrupa eventos por domainid y cuenta cuántos hubo en los últimos N minutos.
+    aql_query = (
+        f"SELECT DOMAINNAME(domainid) AS metric, LONG(COUNT(*)) AS value "
+        f"FROM events GROUP BY domainid LAST {MINUTOS_INTERVALO} MINUTES"
+    )
     
-    # Header SEC requerido por API Ariel y formato de respuesta JSON.
+    # Autenticación mediante Header SEC (Security Token).
     headers = {"SEC": SEC_TOKEN, "Accept": "application/json"}
-
-    # Endpoint base para crear y consultar busquedas Ariel.
     base_url = f"https://{QRADAR_IP}/api/ariel/searches"
 
     try:
-        # 2) Envia la consulta AQL y obtiene search_id.
-        #    search_id es el identificador que QRadar entrega para consultar estado/resultados.
+        # --- PASO 1: Iniciar la búsqueda en QRadar ---
+        print(f"[{datetime.now().isoformat()}] Iniciando búsqueda Ariel en QRadar...")
         res = requests.post(
             base_url,
             headers=headers,
@@ -187,13 +221,12 @@ def sync_qradar_to_mongo():
         )
         search_id = request_json(res).get("search_id")
 
-        # Sin search_id no se puede continuar con polling ni resultados.
         if not search_id:
-            raise RuntimeError("QRadar no devolvio search_id para la consulta AQL")
+            raise RuntimeError("QRadar no devolvió search_id para la consulta AQL")
 
-        # 3) Polling de estado hasta COMPLETED, ERROR o timeout logico.
-        #    Se limita con MAX_POLL_ATTEMPTS para evitar ciclos infinitos.
-        for _ in range(MAX_POLL_ATTEMPTS):
+        # --- PASO 2: Polling (Esperar a que termine) ---
+        print(f"Búsqueda ID {search_id} en curso. Esperando finalización...")
+        for i in range(MAX_POLL_ATTEMPTS):
             status_res = request_json(
                 requests.get(
                     f"{base_url}/{search_id}",
@@ -203,20 +236,19 @@ def sync_qradar_to_mongo():
                 )
             )
 
-            # Valores comunes esperados: WAIT, EXECUTE, SORTING, COMPLETED, ERROR.
             status = status_res.get("status")
             if status == "COMPLETED":
                 break
             if status == "ERROR":
-                raise RuntimeError("QRadar devolvio estado ERROR en la busqueda")
+                raise RuntimeError(f"QRadar devolvió estado ERROR para la búsqueda {search_id}")
 
-            # Espera entre consultas para no sobrecargar el endpoint.
+            # Esperar antes del siguiente intento para no saturar la API de la consola.
             time.sleep(POLL_INTERVAL_SECONDS)
         else:
-            # Este else del for se ejecuta solo si no hubo break.
-            raise TimeoutError("No se completo la busqueda de QRadar dentro del tiempo esperado")
+            raise TimeoutError(f"La búsqueda {search_id} excedió {MAX_POLL_ATTEMPTS} intentos de polling.")
 
-        # 4) Descarga resultados finales de la busqueda completada.
+        # --- PASO 3: Descargar resultados ---
+        print("Búsqueda completada. Descargando resultados...")
         results = request_json(
             requests.get(
                 f"{base_url}/{search_id}/results",
@@ -226,74 +258,79 @@ def sync_qradar_to_mongo():
             )
         )
         
-        # 5) Conexion a Mongo y preparacion de documentos de salida.
+        # --- PASO 4: Procesamiento e inserción en MongoDB ---
+        # Conexión persistente para el lote de documentos.
         client = MongoClient(mongo_uri)
         col = client[DB_NAME][COLLECTION_NAME]
         
-        # Marca temporal compartida por todos los documentos de esta corrida.
+        # Obtener contexto temporal único para evitar discrepancias de milisegundos entre docs.
         ahora_utc, ahora_local = get_time_context()
-
-        # Lista batch para insertar en una sola operacion (insert_many).
         documentos = []
 
-        # Recorre cada fila devuelta por QRadar.
+        # results['events'] contiene el array de filas devueltas por la consulta SELECT AQL.
         for row in results.get('events', []):
-            # Total de eventos del dominio en la ventana consultada.
             total_eventos = int(row['value'])
-
-            # EPS entero por ventana real; minimo permitido = 1.
             eps_calculado = calculate_eps(total_eventos, MINUTOS_INTERVALO)
             
-            # Documento final que se persiste en MongoDB.
+            # Esquema de documento optimizado para consultas temporales y reportes.
             documentos.append({
-                # Si QRadar no trae dominio, se etiqueta como Default Domain.
+                # metric contiene el DOMAINNAME(domainid) calculado en AQL.
                 "cliente": row['metric'] if row['metric'] else "Default Domain",
                 "eventos_totales": total_eventos,
                 "eps": eps_calculado,
-                "fecha": ahora_utc,
-                "dia": ahora_local.strftime("%Y-%m-%d"),
-                "hora": ahora_local.strftime("%H:00"),
-                "hora_minuto": ahora_local.strftime("%H:%M"),
-                "timezone": APP_TIMEZONE,
+                "fecha": ahora_utc,                         # Timestamp ISO UTC (técnico).
+                "dia": ahora_local.strftime("%Y-%m-%d"),    # Para filtros por jornada.
+                "hora": ahora_local.strftime("%H:00"),      # Para agrupaciones por bloque horario.
+                "hora_minuto": ahora_local.strftime("%H:%M"),# Hora exacta de captura.
+                "timezone": APP_TIMEZONE,                    # Contexto geográfico.
             })
 
-        # Export de prueba opcional a TXT; util para validar conversion antes de productivo.
+        # Almacenar copia local si el modo debug está activo.
         export_debug_txt(documentos)
 
-        # Inserta lote solo si hubo resultados.
+        # Inserción masiva para minimizar el número de operaciones de red hacia MongoDB.
         if documentos:
             col.insert_many(documentos)
-            print(f"Sincronizacion exitosa: {len(documentos)} clientes actualizados.")
+            print(f"Sincronización exitosa: {len(documentos)} dominios/clientes procesados.")
         else:
-            print("Sin datos para insertar en MongoDB.")
+            print("No se encontraron eventos en este intervalo.")
 
-        # Cierre explicito del cliente para liberar recursos.
+        # Liberación de recursos.
         client.close()
 
     except Exception as e:
-        # Cualquier error del flujo se reporta de forma controlada.
-        print(f"Error: {e}")
+        print(f"ERROR DURANTE EL PROCESO: {e}")
 
 
 def run_scheduler():
-    # Modo una sola ejecucion para pruebas/manual.
+    """
+    Gestiona el ciclo de vida del script: corre una vez o entra en bucle infinito
+    según la configuración de RUN_CONTINUOUS.
+    """
     if not RUN_CONTINUOUS:
         sync_qradar_to_mongo()
         return
 
     if RUN_INTERVAL_SECONDS <= 0:
-        raise ValueError("RUN_INTERVAL_SECONDS debe ser mayor que 0")
+        raise ValueError("RUN_INTERVAL_SECONDS debe ser mayor que 0 para ejecución continua.")
 
-    print(
-        f"Modo continuo habilitado. Intervalo entre ejecuciones: {RUN_INTERVAL_SECONDS} segundos."
-    )
+    print("=" * 60)
+    print(f"MODO CONTINUO ACTIVADO - Intervalo: {RUN_INTERVAL_SECONDS} segundos")
+    print("=" * 60)
 
     while True:
-        sync_qradar_to_mongo()
-        print(f"Esperando {RUN_INTERVAL_SECONDS} segundos para la siguiente ejecucion...")
+        try:
+            sync_qradar_to_mongo()
+        except KeyboardInterrupt:
+            print("\nScript detenido por el usuario.")
+            break
+        except Exception as e:
+            print(f"Falla crítica en el bucle: {e}. Reintentando en el próximo ciclo...")
+        
+        print(f"Siguiente ejecución en {RUN_INTERVAL_SECONDS} segundos...")
         time.sleep(RUN_INTERVAL_SECONDS)
 
 
-# Punto de entrada cuando el archivo se ejecuta como script directo.
+# --- PUNTO DE ENTRADA ---
 if __name__ == "__main__":
-    run_scheduler()
+    run_scheduler()

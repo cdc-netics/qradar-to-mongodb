@@ -1,259 +1,103 @@
-# qradar-to-mongodb
+# QRadar to MongoDB - Event Sync
 
-Script en Python para consultar eventos en IBM QRadar mediante AQL y guardar metricas por dominio en MongoDB.
+Script en Python diseñado para extraer métricas de eventos desde **IBM QRadar** (mediante consultas AQL) y persistirlas en **MongoDB** para su posterior análisis o visualización.
 
-## Requisitos
+---
 
-- Linux (Ubuntu, Debian, RHEL, Rocky o AlmaLinux)
-- Python 3.10 o superior
-- Acceso de red a QRadar API
-- MongoDB accesible desde el host donde se ejecuta el script
-- Dependencias Python listadas en `requirements.txt`
+## 🏗️ Cómo funciona (Arquitectura del Proceso)
 
-## Instalacion (Linux)
+El script sigue un flujo de trabajo lineal y robusto para garantizar la integridad de los datos:
 
-1. Instalar dependencias del sistema (Debian/Ubuntu):
+1.  **Consulta AQL**: Genera una consulta Ariel Query Language (AQL) que agrupa el conteo de eventos por `domainid` (dominio/cliente) en una ventana de tiempo configurable (ej: últimos 60 minutos).
+2.  **Ejecución Ariel**: Envía la consulta a la API de QRadar y recibe un `search_id`.
+3.  **Polling de Estado**: Consulta periódicamente el estado de la búsqueda en QRadar hasta que el estado sea `COMPLETED`.
+4.  **Cálculo de EPS**: 
+    - Descarga los resultados JSON.
+    - Calcula el promedio de **Eventos Por Segundo (EPS)** dividiendo el total de eventos por los segundos de la ventana.
+    - Aplica una regla de negocio: si el EPS calculado es 0 pero hubo eventos, se fuerza a **1** para mantener visibilidad.
+5.  **Persistencia en MongoDB**: Transforma los datos al esquema de documentos del proyecto e inserta los resultados en lote (*batch*) en la colección configurada.
 
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip ca-certificates
-```
+---
 
-1. Crear y activar entorno virtual:
+## 📋 Requisitos
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+- **Sistema Operativo**: Linux (Ubuntu, Debian, RHEL, Rocky, AlmaLinux).
+- **Python**: Versión 3.10 o superior.
+- **Conectividad**: Acceso HTTPS (puerto 443) a la consola de QRadar y conectividad al puerto de MongoDB (default 27017).
+- **QRadar**: Un *Security Token* (SEC) con permisos para ejecutar búsquedas Ariel.
 
-1. Instalar dependencias:
+---
 
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
+## ⚙️ Configuración (Variables de Entorno)
 
-1. Crear archivo de entorno a partir de ejemplo:
+El script utiliza un archivo `.env` para su configuración. Use `.env.example` como base.
 
-```bash
-cp .env.example .env
-```
+| Variable | Descripción | Valor sugerido |
+| :--- | :--- | :--- |
+| `QRADAR_IP` | IP o Hostname de la consola QRadar | `10.1.2.3` |
+| `QRADAR_TOKEN` | Token SEC de QRadar | `xxxxxxxx-xxxx-...` |
+| `MONGO_URI` | URI completa de conexión (Prioridad alta) | `mongodb://...` |
+| `MONGO_HOST` | Host de MongoDB | `localhost` |
+| `MONGO_DB` | Base de datos destino | `qradar_metrics` |
+| `MONGO_COLLECTION`| Colección destino | `eps_stats` |
+| `MINUTOS_INTERVALO`| Ventana de tiempo AQL (minutos) | `60` |
+| `APP_TIMEZONE` | Zona horaria para campos de fecha | `America/Santiago` |
+| `RUN_CONTINUOUS` | Ejecutar en bucle infinito | `true` |
+| `RUN_INTERVAL_SECONDS`| Espera entre ejecuciones (segundos) | `3600` |
 
-1. Completar variables en `.env`.
+---
 
-## Variables de entorno
+## 🚀 Instalación y Despliegue
 
-| Variable | Descripcion | Ejemplo |
-| --- | --- | --- |
-| `QRADAR_IP` | IP o hostname de QRadar | `10.10.10.10` |
-| `QRADAR_TOKEN` | Token SEC para API de QRadar | `xxxxxxxx` |
-| `MONGO_URI` | URI completa de conexion a MongoDB (prioridad alta) | `mongodb://user:pass@localhost:27017/?authSource=admin` |
-| `MONGO_HOST` | Host MongoDB (si no usas `MONGO_URI`) | `localhost` |
-| `MONGO_PORT` | Puerto MongoDB (si no usas `MONGO_URI`) | `27017` |
-| `MONGO_USER` | Usuario MongoDB (opcional) | `qradar_user` |
-| `MONGO_PASSWORD` | Password MongoDB (opcional) | `replace-me` |
-| `MONGO_AUTH_SOURCE` | Base de autenticacion de MongoDB | `admin` |
-| `MONGO_PARAMS` | Parametros extra URI (sin `?`) | `tls=true&retryWrites=true` |
-| `MONGO_DB` | Nombre de base de datos | `qradar_metrics` |
-| `MONGO_COLLECTION` | Nombre de coleccion destino | `eps_por_cliente` |
-| `MINUTOS_INTERVALO` | Ventana de consulta AQL en minutos | `60` |
-| `APP_TIMEZONE` | Zona horaria de negocio para `dia` y `hora` | `America/Santiago` |
-| `REQUEST_TIMEOUT` | Timeout HTTP para QRadar en segundos | `30` |
-| `POLL_INTERVAL_SECONDS` | Espera entre consultas de estado | `2` |
-| `MAX_POLL_ATTEMPTS` | Maximo de intentos de polling | `120` |
-| `RUN_CONTINUOUS` | Ejecuta el script en bucle continuo | `true` |
-| `RUN_INTERVAL_SECONDS` | Espera entre corridas en modo continuo | `3600` |
-| `DEBUG_EXPORT_TXT` | Exporta salida de prueba a TXT (`true`/`false`) | `false` |
-| `DEBUG_TXT_FILE` | Nombre del archivo TXT de debug | `debug_qradar_output.txt` |
-
-Prioridad de conexion MongoDB:
-
-- Si `MONGO_USER` y `MONGO_PASSWORD` estan definidos, el script construye la URI con `MONGO_HOST`, `MONGO_PORT`, `MONGO_AUTH_SOURCE` y `MONGO_PARAMS`.
-- Si `MONGO_USER` y `MONGO_PASSWORD` estan vacios, el script usa `MONGO_URI`.
-
-## Regla de EPS
-
-- El EPS se calcula sobre la ventana real: `MINUTOS_INTERVALO * 60`.
-- El resultado se guarda como entero (sin decimales).
-- Si el promedio da `0`, se fuerza a `1` por requerimiento operativo.
-
-## Formato de documento en MongoDB
-
-Cada dominio (cliente) se guarda como un documento con esta estructura:
-
-```json
-{
-    "cliente": "ACME",
-    "eventos_totales": 7200,
-    "eps": 2,
-    "fecha": "2026-03-20T14:35:10.123456",
-    "dia": "2026-03-20",
-    "hora": "14:00",
-    "hora_minuto": "14:35",
-    "timezone": "America/Santiago"
-}
-```
-
-Tipos almacenados:
-
-- `cliente`: string
-- `eventos_totales`: int
-- `eps`: int
-- `fecha`: BSON Date en UTC (timestamp tecnico)
-- `dia`: string
-- `hora`: string (truncada por hora, formato HH:00)
-- `hora_minuto`: string (hora local exacta, formato HH:MM)
-- `timezone`: string (zona horaria aplicada a dia/hora)
-
-## Prueba con TXT (opcional)
-
-Para validar facilmente la salida antes de productivo:
-
-1. En `.env`, configurar:
+### Opción A: Instalador Automático (Recomendado)
+El proyecto incluye un script inteligente que prepara todo el entorno:
 
 ```bash
-DEBUG_EXPORT_TXT=true
-DEBUG_TXT_FILE=debug_qradar_output.txt
-```
-
-1. Ejecutar el script y revisar el archivo generado.
-
-Para productivo, dejar `DEBUG_EXPORT_TXT=false`.
-
-## Ejecucion
-
-```bash
-python3 qradar-to-mongodb.py
-```
-
-Comportamiento de ejecucion:
-
-- Si `RUN_CONTINUOUS=false`, ejecuta una sola vez.
-- Si `RUN_CONTINUOUS=true`, ejecuta en bucle y espera `RUN_INTERVAL_SECONDS` entre corridas.
-- Si no defines `RUN_INTERVAL_SECONDS`, usa `MINUTOS_INTERVALO * 60`.
-
-## Linux
-
-La guia detallada de despliegue Linux esta en `LINUX_SETUP.md`.
-
-## Levantar Servicio En Linux (Paso A Paso)
-
-Ejemplo asumiendo proyecto en `/opt/qradar-to-mongodb`.
-
-1. Preparar entorno y dependencias:
-
-```bash
-cd /opt/qradar-to-mongodb
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-cp .env.example .env
-```
-
-1. Editar `.env` con tus valores reales (QRadar, Mongo y scheduler).
-
-1. Validar que las rutas esperadas existen:
-
-```bash
-ls -l /opt/qradar-to-mongodb/.venv/bin/python
-ls -l /opt/qradar-to-mongodb/.env
-ls -l /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service
-```
-
-1. Instalar y activar el servicio systemd:
-
-```bash
-sudo cp /opt/qradar-to-mongodb/deploy/systemd/qradar-to-mongodb.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable qradar-to-mongodb
-sudo systemctl start qradar-to-mongodb
-```
-
-1. Verificar estado y logs:
-
-```bash
-sudo systemctl status qradar-to-mongodb
-sudo journalctl -u qradar-to-mongodb -f
-```
-
-Si no inicia, revisar:
-
-- Que el usuario del servicio exista (`User=` y `Group=` en el .service).
-- Que `WorkingDirectory` y `ExecStart` apunten a `/opt/qradar-to-mongodb`.
-- Que `.env` tenga credenciales validas de MongoDB.
-
-## Instalacion Automatizada (Script .sh)
-
-Tambien puedes automatizar todo con el instalador:
-
-```bash
-cd /opt/qradar-to-mongodb
 chmod +x scripts/install_service.sh
 sudo ./scripts/install_service.sh
 ```
+El instalador creará el entorno virtual, instalará dependencias, configurará el archivo `.env` y levantará el servicio en `systemd`.
 
-Al ejecutarlo sin parametros muestra menu para elegir:
+### Opción B: Instalación Manual
+Consulte la [Guía de Instalación en Linux](LINUX_SETUP.md) para los pasos detallados comando a comando.
 
-- `Install / Update service`
-- `Repair runtime/service (safe)`
-- `Safe uninstall service`
+---
 
-Modo no interactivo:
+## 🛠️ Comandos de Administración
 
-```bash
-sudo ./scripts/install_service.sh install
-sudo ./scripts/install_service.sh repair
-sudo ./scripts/install_service.sh uninstall
-# Equivalent short options:
-sudo ./scripts/install_service.sh 1
-sudo ./scripts/install_service.sh 2
-sudo ./scripts/install_service.sh 3
-```
-
-`repair` corrige automaticamente el caso mas comun de falla:
-
-- Repara permisos/owner de `.env` para el usuario del servicio.
-- Reescribe el unit file de systemd con rutas correctas.
-- Ejecuta `daemon-reload`, `enable` y `restart`.
-
-Que hace automaticamente:
-
-- Crea/actualiza `.venv`.
-- Instala dependencias desde `requirements.txt`.
-- Crea `.env` desde `.env.example` si no existe.
-- Genera `/etc/systemd/system/qradar-to-mongodb.service`.
-- Ejecuta `daemon-reload`, `enable` y `restart` del servicio.
-
-Si necesitas valores custom:
+Si usó el instalador automático, puede gestionar el proceso como un servicio estándar de Linux:
 
 ```bash
-sudo APP_DIR=/opt/qradar-to-mongodb SERVICE_USER=<linux_user> SERVICE_GROUP=<linux_group> ./scripts/install_service.sh install
+# Ver si el servicio está corriendo y sus últimos logs
+sudo systemctl status qradar-to-mongodb
+
+# Ver logs en tiempo real
+sudo journalctl -u qradar-to-mongodb -f
+
+# Reiniciar tras un cambio en el .env
+sudo systemctl restart qradar-to-mongodb
 ```
 
-## Flujo
+---
 
-1. Construye una consulta AQL por dominio.
-2. Lanza la busqueda Ariel en QRadar.
-3. Hace polling hasta obtener estado `COMPLETED`.
-4. Calcula EPS por dominio.
-5. Inserta documentos en MongoDB.
+## 🔍 Solución de Problemas (Troubleshooting)
 
-## Estructura del proyecto
+- **Error: search_id no devuelto**: Verifique que el `QRADAR_TOKEN` no haya expirado y que la `QRADAR_IP` sea accesible.
+- **El script no inicia (ModuleNotFoundError)**: Asegúrese de estar ejecutando el script dentro del entorno virtual (`source .venv/bin/activate`).
+- **Fallas de conexión a MongoDB**: Verifique que `MONGO_USER` y `MONGO_PASSWORD` sean correctos o que la `MONGO_URI` no tenga errores de sintaxis. Use `repair` en el instalador si sospecha de permisos en `.env`.
+- **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
+
+---
+
+## 📂 Estructura del Proyecto
 
 ```text
 .
-|-- qradar-to-mongodb.py
-|-- requirements.txt
-|-- .env.example
-|-- .gitignore
-|-- LINUX_SETUP.md
-|-- CHANGELOG.md
-`-- .github/
-    `-- ISSUE_TEMPLATE/
+├── qradar-to-mongodb.py   # Lógica principal del script
+├── requirements.txt       # Dependencias de Python
+├── .env.example           # Plantilla de configuración
+├── scripts/
+│   └── install_service.sh # Instalador y gestor automatizado
+├── LINUX_SETUP.md         # Documentación detallada de despliegue
+└── README.md              # Documentación general
 ```
-
-## Contribuciones
-
-- Usa las plantillas de Issues para reportar bugs o proponer mejoras.
-- Mantener cambios pequenos y con contexto claro en el PR.
