@@ -104,6 +104,35 @@ Este comando:
 - **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
 - **Error al bajar cambios (git pull)**: Si git detecta cambios locales (comúnmente tras un `chmod`) que impiden el pull, use: `git stash push -m "local-install-script-fix"` para limpiar el estado temporalmente y reintentar el `git pull`.
 
+
+---
+
+## ➕ Cómo agregar nuevas consultas
+
+El sistema es extensible sin tocar el código Python. Para añadir una nueva métrica:
+
+1.  **Edite `queries.json`**: Añada un nuevo objeto a la lista.
+2.  **Configure los campos**:
+    - `id`: Identificador único de la tarea.
+    - `aql`: La consulta AQL (el script añade el tiempo automáticamente).
+    - `collection`: Nombre de la tabla en MongoDB. **necesitas crearla manualmente**, MongoDB no la va a crear.
+    - `mapping`: Asocia columnas de QRadar con campos de Mongo.
+3.  **Reinicie**: `sudo systemctl restart qradar-to-mongodb`
+
+#### Ejemplo de `queries.json`:
+```json
+ {
+    "id": "logsource_summary",
+    "aql": "SELECT LOGSOURCETYPENAME(devicetype) AS type, SUM(eventcount) AS count FROM events GROUP BY devicetype",
+    "collection": "logsource_summary",
+    "mapping": {
+      "type": "log_source_type",
+      "count": "total_eventos"
+    },
+    "calculate_eps": true
+  }
+```
+
 ---
 
 ## 📂 Estructura del Proyecto
