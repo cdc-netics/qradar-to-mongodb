@@ -47,13 +47,12 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 
 ## 🚀 Instalación y Despliegue
 
-### Opción A: Instalador Automático (Recomendado)
-El proyecto incluye un script inteligente que prepara todo el entorno:
+Para preparar el entorno y activar el servicio:
 
-```bash
-chmod +x scripts/install_service.sh
-sudo ./scripts/install_service.sh
-```
+1. **Dar permisos**: `chmod +x scripts/install_service.sh`
+2. **Ejecutar**: `./scripts/install_service.sh`
+3. **Seleccionar Opción 1**: "Instalar / Actualizar servicio".
+
 El instalador creará el entorno virtual, instalará dependencias, configurará el archivo `.env` y levantará el servicio en `systemd`.
 
 ### Opción B: Instalación Manual
