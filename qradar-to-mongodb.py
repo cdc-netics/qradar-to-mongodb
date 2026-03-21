@@ -44,8 +44,10 @@ MONGO_PARAMS = os.getenv("MONGO_PARAMS")
 DB_NAME = os.getenv("MONGO_DB")
 COLLECTION_NAME = os.getenv("MONGO_COLLECTION")
 
-# Ventana de tiempo (en minutos) que se usará en la cláusula LAST de la query AQL.
-MINUTOS_INTERVALO = int(os.getenv("MINUTOS_INTERVALO", 60))
+# Ventana de tiempo (en minutos) para la consulta AQL y frecuencia de ejecución.
+# Esta es la única variable necesaria para controlar el ritmo del script.
+# Window in minutes for AQL query and sync frequency.
+SYNC_INTERVAL_MINUTES = int(os.getenv("SYNC_INTERVAL_MINUTES", os.getenv("MINUTOS_INTERVALO", 60)))
 
 # Zona horaria para los campos 'dia' y 'hora' que se guardan en el documento.
 # Esto permite que los reportes en MongoDB coincidan con el horario local de negocio.
@@ -58,8 +60,10 @@ DEBUG_TXT_FILE = os.getenv("DEBUG_TXT_FILE", "debug_qradar_output.txt")
 # Control de ejecución continua (Daemon mode).
 # Si es true, el script entra en un bucle infinito consultando periódicamente.
 RUN_CONTINUOUS = os.getenv("RUN_CONTINUOUS", "false").strip().lower() == "true"
-# Tiempo entre ejecuciones completas (el ciclo completo de QRadar -> Mongo).
-RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", MINUTOS_INTERVALO * 60))
+
+# Tiempo entre ejecuciones completas en SEGUNDOS.
+# Se deriva automáticamente de SYNC_INTERVAL_MINUTES a menos que se fuerce otro valor.
+RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", SYNC_INTERVAL_MINUTES * 60))
 
 # Silenciar advertencias de certificados auto-firmados o inválidos (InsecureRequestWarning).
 # IMPORTANTE: En producción, use certificados válidos y cambie verify=False a True.
@@ -202,7 +206,7 @@ def sync_qradar_to_mongo():
     # QUERY AQL: Agrupa eventos por domainid y cuenta cuántos hubo en los últimos N minutos.
     aql_query = (
         f"SELECT DOMAINNAME(domainid) AS metric, LONG(COUNT(*)) AS value "
-        f"FROM events GROUP BY domainid LAST {MINUTOS_INTERVALO} MINUTES"
+        f"FROM events GROUP BY domainid LAST {SYNC_INTERVAL_MINUTES} MINUTES"
     )
     
     # Autenticación mediante Header SEC (Security Token).
@@ -270,7 +274,7 @@ def sync_qradar_to_mongo():
         # results['events'] contiene el array de filas devueltas por la consulta SELECT AQL.
         for row in results.get('events', []):
             total_eventos = int(row['value'])
-            eps_calculado = calculate_eps(total_eventos, MINUTOS_INTERVALO)
+            eps_calculado = calculate_eps(total_eventos, SYNC_INTERVAL_MINUTES)
             
             # Esquema de documento optimizado para consultas temporales y reportes.
             documentos.append({

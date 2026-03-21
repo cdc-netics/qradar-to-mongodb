@@ -40,10 +40,9 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 | `MONGO_HOST` | Host de MongoDB | `localhost` |
 | `MONGO_DB` | Base de datos destino | `qradar_metrics` |
 | `MONGO_COLLECTION`| Colección destino | `eps_stats` |
-| `MINUTOS_INTERVALO`| Ventana de tiempo AQL (minutos) | `60` |
+| `SYNC_INTERVAL_MINUTES`| Ventana AQL y frecuencia (minutos) | `60` |
 | `APP_TIMEZONE` | Zona horaria para campos de fecha | `America/Santiago` |
 | `RUN_CONTINUOUS` | Ejecutar en bucle infinito | `true` |
-| `RUN_INTERVAL_SECONDS`| Espera entre ejecuciones (segundos) | `3600` |
 
 ---
 
@@ -87,7 +86,7 @@ Si desea validar que todo está correctamente configurado (red, QRadar y MongoDB
 ```bash
 sudo systemd-run --unit qradar-smoketest --wait --collect \
   -p WorkingDirectory=/opt/qradar-to-mongodb \
-  /bin/bash -lc 'set -a; source /opt/qradar-to-mongodb/.env; set +a; RUN_CONTINUOUS=false MINUTOS_INTERVALO=5 /opt/qradar-to-mongodb/.venv/bin/python /opt/qradar-to-mongodb/qradar-to-mongodb.py'
+  /bin/bash -lc 'set -a; source /opt/qradar-to-mongodb/.env; set +a; RUN_CONTINUOUS=false SYNC_INTERVAL_MINUTES=5 /opt/qradar-to-mongodb/.venv/bin/python /opt/qradar-to-mongodb/qradar-to-mongodb.py'
 ```
 
 Este comando:

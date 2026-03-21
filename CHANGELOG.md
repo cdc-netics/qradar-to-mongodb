@@ -6,6 +6,13 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 
 ## [Unreleased]
 
+### Changed
+
+- **Simplificación de configuración**: Se consolidaron `MINUTOS_INTERVALO` y `RUN_INTERVAL_SECONDS` en una única variable maestra: `SYNC_INTERVAL_MINUTES`.
+- El script ahora calcula automáticamente los segundos de espera basándose en los minutos de la ventana de consulta para evitar errores humanos de desincronización.
+- Limpieza integral del archivo `.env` para eliminar redundancias y seguir el estándar de `.env.example`.
+- Retrocompatibilidad mantenida para `MINUTOS_INTERVALO` si `SYNC_INTERVAL_MINUTES` no está definido en el entorno.
+
 ### Added
 
 - Nueva accion repair para corregir permisos de .env y reparar systemd sin reinstalacion completa.
