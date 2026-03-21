@@ -111,8 +111,10 @@ Este comando:
 
 ```text
 .
-├── qradar-to-mongodb.py   # Lógica principal del script
+├── qradar-to-mongodb.py   # Motor de sincronización multi-tarea
+├── queries.json           # Catálogo de consultas AQL y mapeo a MongoDB
 ├── requirements.txt       # Dependencias de Python
+├── .env                  # Configuración de infraestructura (IP, Token, DB)
 ├── .env.example           # Plantilla de configuración
 ├── scripts/
 │   └── install_service.sh # Instalador y gestor automatizado

@@ -191,31 +191,29 @@ def get_time_context():
     return now_utc, now_local
 
 
-def sync_qradar_to_mongo():
-    """
-    FLUJO PRINCIPAL:
-    1. Ejecuta consulta AQL en QRadar Ariel API.
-    2. Monitorea el estado de la búsqueda hasta que finalice.
-    3. Obtiene los resultados de eventos por dominio.
-    4. Procesa y transforma los datos al esquema de MongoDB.
-    5. Inserta en lote (batch) los documentos en la base de datos.
-    """
-    validate_required_env()
-    mongo_uri = get_mongo_uri()
+# --- PASO 5: Motor de Ejecución Multi-Tarea ---
 
-    # QUERY AQL: Agrupa eventos por domainid y cuenta cuántos hubo en los últimos N minutos.
-    aql_query = (
-        f"SELECT DOMAINNAME(domainid) AS metric, LONG(COUNT(*)) AS value "
-        f"FROM events GROUP BY domainid LAST {SYNC_INTERVAL_MINUTES} MINUTES"
-    )
+def process_task(task, headers, base_url, mongo_uri):
+    """
+    Procesa una tarea individual definida en queries.json.
+    """
+    task_id = task.get("id", "unnamed_task")
+    print(f"\n>>> PROCESANDO TAREA: {task_id}")
     
-    # Autenticación mediante Header SEC (Security Token).
-    headers = {"SEC": SEC_TOKEN, "Accept": "application/json"}
-    base_url = f"https://{QRADAR_IP}/api/ariel/searches"
+    # 1. Preparar Query AQL con el intervalo actual.
+    raw_aql = task.get("aql")
+    if not raw_aql:
+        print(f"Error: Tarea {task_id} no tiene consulta AQL definida.")
+        return
+    
+    aql_query = f"{raw_aql} LAST {SYNC_INTERVAL_MINUTES} MINUTES"
+    collection_name = task.get("collection", "default_collection")
+    mapping = task.get("mapping", {})
+    do_eps = task.get("calculate_eps", False)
 
     try:
         # --- PASO 1: Iniciar la búsqueda en QRadar ---
-        print(f"[{datetime.now().isoformat()}] Iniciando búsqueda Ariel en QRadar...")
+        print(f"Enviando consulta AQL a QRadar...")
         res = requests.post(
             base_url,
             headers=headers,
@@ -226,10 +224,9 @@ def sync_qradar_to_mongo():
         search_id = request_json(res).get("search_id")
 
         if not search_id:
-            raise RuntimeError("QRadar no devolvió search_id para la consulta AQL")
+            raise RuntimeError("QRadar no devolvió search_id")
 
         # --- PASO 2: Polling (Esperar a que termine) ---
-        print(f"Búsqueda ID {search_id} en curso. Esperando finalización...")
         for i in range(MAX_POLL_ATTEMPTS):
             status_res = request_json(
                 requests.get(
@@ -239,20 +236,16 @@ def sync_qradar_to_mongo():
                     timeout=REQUEST_TIMEOUT,
                 )
             )
-
             status = status_res.get("status")
             if status == "COMPLETED":
                 break
             if status == "ERROR":
-                raise RuntimeError(f"QRadar devolvió estado ERROR para la búsqueda {search_id}")
-
-            # Esperar antes del siguiente intento para no saturar la API de la consola.
+                raise RuntimeError(f"QRadar devolvió estado ERROR para búsqueda {search_id}")
             time.sleep(POLL_INTERVAL_SECONDS)
         else:
-            raise TimeoutError(f"La búsqueda {search_id} excedió {MAX_POLL_ATTEMPTS} intentos de polling.")
+            raise TimeoutError(f"Excedido tiempo de espera para búsqueda {search_id}")
 
         # --- PASO 3: Descargar resultados ---
-        print("Búsqueda completada. Descargando resultados...")
         results = request_json(
             requests.get(
                 f"{base_url}/{search_id}/results",
@@ -262,77 +255,110 @@ def sync_qradar_to_mongo():
             )
         )
         
-        # --- PASO 4: Procesamiento e inserción en MongoDB ---
-        # Conexión persistente para el lote de documentos.
+        # --- PASO 4: Mapeo dinámico e inserción en MongoDB ---
         client = MongoClient(mongo_uri)
-        col = client[DB_NAME][COLLECTION_NAME]
+        col = client[DB_NAME][collection_name]
         
-        # Obtener contexto temporal único para evitar discrepancias de milisegundos entre docs.
         ahora_utc, ahora_local = get_time_context()
         documentos = []
 
-        # results['events'] contiene el array de filas devueltas por la consulta SELECT AQL.
         for row in results.get('events', []):
-            total_eventos = int(row['value'])
-            eps_calculado = calculate_eps(total_eventos, SYNC_INTERVAL_MINUTES)
+            # Crear documento base con metadatos de tiempo comunes.
+            doc = {
+                "fecha": ahora_utc,
+                "dia": ahora_local.strftime("%Y-%m-%d"),
+                "hora": ahora_local.strftime("%H:00"),
+                "hora_minuto": ahora_local.strftime("%H:%M"),
+                "timezone": APP_TIMEZONE,
+            }
+
+            # Aplicar mapeo de columnas dinámicamente.
+            for q_col, db_field in mapping.items():
+                if q_col in row:
+                    doc[db_field] = row[q_col]
             
-            # Esquema de documento optimizado para consultas temporales y reportes.
-            documentos.append({
-                # metric contiene el DOMAINNAME(domainid) calculado en AQL.
-                "cliente": row['metric'] if row['metric'] else "Default Domain",
-                "eventos_totales": total_eventos,
-                "eps": eps_calculado,
-                "fecha": ahora_utc,                         # Timestamp ISO UTC (técnico).
-                "dia": ahora_local.strftime("%Y-%m-%d"),    # Para filtros por jornada.
-                "hora": ahora_local.strftime("%H:00"),      # Para agrupaciones por bloque horario.
-                "hora_minuto": ahora_local.strftime("%H:%M"),# Hora exacta de captura.
-                "timezone": APP_TIMEZONE,                    # Contexto geográfico.
-            })
+            # Lógica especial para EPS si se requiere.
+            if do_eps:
+                # Intentamos detectar el campo de conteo basándonos en el mapping.
+                # Normalmente mapeamos 'value' o 'total' a algo que contenga 'eventos'.
+                count_field = next((v for k, v in mapping.items() if "total" in v or "eventos" in v), None)
+                if count_field and count_field in doc:
+                    total_eventos = int(doc[count_field]) if doc[count_field] else 0
+                    doc["eps"] = calculate_eps(total_eventos, SYNC_INTERVAL_MINUTES)
 
-        # Almacenar copia local si el modo debug está activo.
-        export_debug_txt(documentos)
+            documentos.append(doc)
 
-        # Inserción masiva para minimizar el número de operaciones de red hacia MongoDB.
         if documentos:
             col.insert_many(documentos)
-            print(f"Sincronización exitosa: {len(documentos)} dominios/clientes procesados.")
+            print(f"Sincronización exitosa: {len(documentos)} registros insertados en '{collection_name}'.")
+            export_debug_txt(documentos)
         else:
-            print("No se encontraron eventos en este intervalo.")
+            print(f"No se encontraron datos para la tarea {task_id} en este intervalo.")
 
-        # Liberación de recursos.
         client.close()
 
     except Exception as e:
-        print(f"ERROR DURANTE EL PROCESO: {e}")
+        print(f"ERROR EN TAREA '{task_id}': {e}")
+
+
+def run_sync_cycle():
+    """
+    Coordina un ciclo completo de sincronización para todas las tareas.
+    """
+    validate_required_env()
+    mongo_uri = get_mongo_uri()
+    headers = {"SEC": SEC_TOKEN, "Accept": "application/json"}
+    base_url = f"https://{QRADAR_IP}/api/ariel/searches"
+
+    # Cargar catálogo de queries.
+    config_path = os.path.join(os.path.dirname(__file__), "queries.json")
+    if not os.path.exists(config_path):
+        print(f"CRÍTICO: No se encontró el archivo {config_path}")
+        return
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            tasks = json.load(f)
+    except Exception as e:
+        print(f"Error cargando queries.json: {e}")
+        return
+
+    # Ejecutar cada tarea secuencialmente.
+    for task in tasks:
+        process_task(task, headers, base_url, mongo_uri)
 
 
 def run_scheduler():
     """
-    Gestiona el ciclo de vida del script: corre una vez o entra en bucle infinito
-    según la configuración de RUN_CONTINUOUS.
+    Gestiona el ciclo de vida del script: corre una vez o entra en bucle infinito.
     """
     if not RUN_CONTINUOUS:
-        sync_qradar_to_mongo()
+        run_sync_cycle()
         return
 
     if RUN_INTERVAL_SECONDS <= 0:
         raise ValueError("RUN_INTERVAL_SECONDS debe ser mayor que 0 para ejecución continua.")
 
     print("=" * 60)
-    print(f"MODO CONTINUO ACTIVADO - Intervalo: {RUN_INTERVAL_SECONDS} segundos")
+    print(f"MOTOR MULTI-TAREA ACTIVO - Intervalo: {RUN_INTERVAL_SECONDS} segundos")
     print("=" * 60)
 
     while True:
         try:
-            sync_qradar_to_mongo()
+            run_sync_cycle()
         except KeyboardInterrupt:
             print("\nScript detenido por el usuario.")
             break
         except Exception as e:
-            print(f"Falla crítica en el bucle: {e}. Reintentando en el próximo ciclo...")
+            print(f"Falla crítica en el ciclo: {e}. Reintentando en el próximo ciclo...")
         
-        print(f"Siguiente ejecución en {RUN_INTERVAL_SECONDS} segundos...")
+        print(f"\nSiguiente ciclo en {RUN_INTERVAL_SECONDS} segundos...")
         time.sleep(RUN_INTERVAL_SECONDS)
+
+
+# --- PUNTO DE ENTRADA ---
+if __name__ == "__main__":
+    run_scheduler()
 
 
 # --- PUNTO DE ENTRADA ---

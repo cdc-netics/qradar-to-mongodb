@@ -8,10 +8,12 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 
 ### Changed
 
-- **Simplificación de configuración**: Se consolidaron `MINUTOS_INTERVALO` y `RUN_INTERVAL_SECONDS` en una única variable maestra: `SYNC_INTERVAL_MINUTES`.
-- El script ahora calcula automáticamente los segundos de espera basándose en los minutos de la ventana de consulta para evitar errores humanos de desincronización.
-- Limpieza integral del archivo `.env` para eliminar redundancias y seguir el estándar de `.env.example`.
-- Retrocompatibilidad mantenida para `MINUTOS_INTERVALO` si `SYNC_INTERVAL_MINUTES` no está definido en el entorno.
+- **Motor Multi-Tarea**: Soporte para ejecutar múltiples consultas AQL en cada ciclo.
+- **Configuración Externa**: Las consultas y su mapeo a colecciones de MongoDB ahora viven en `queries.json`.
+- **Aislamiento de Errores**: Si una tarea falla, el script continúa con las demás del catálogo.
+- **Formato dinámico**: Mapeo flexible de columnas de QRadar a campos de MongoDB definido por tarea.
+- **Nueva métrica**: Añadida tarea `logsource_summary` con formato detallado solicitado por el usuario.
+- **Simplificación de configuración**: Se consolidaron `MINUTOS_INTERVALO` y `RUN_INTERVAL_SECONDS` en `SYNC_INTERVAL_MINUTES`.
 
 ### Added
 

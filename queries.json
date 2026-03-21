@@ -1,0 +1,26 @@
+[
+  {
+    "id": "eps_by_client",
+    "description": "Conteo de eventos y cálculo de EPS por dominio de cliente",
+    "aql": "SELECT DOMAINNAME(domainid) AS metric, LONG(COUNT(*)) AS value FROM events GROUP BY domainid",
+    "collection": "metricas_eps",
+    "mapping": {
+      "metric": "cliente",
+      "value": "eventos_totales"
+    },
+    "calculate_eps": true
+  },
+  {
+    "id": "logsource_summary",
+    "description": "Resumen detallado de eventos por tipo y nombre de fuente de log",
+    "aql": "SELECT LOGSOURCETYPENAME(devicetype) AS log_type, LOGSOURCENAME(logsourceid) AS log_name, SUM(eventcount) AS total, DOMAINNAME(domainid) AS client FROM events GROUP BY logsourceid, domainid, devicetype ORDER BY total DESC",
+    "collection": "logsource_summary",
+    "mapping": {
+      "log_type": "log_source_type",
+      "log_name": "log_source",
+      "total": "total_eventos",
+      "client": "cliente"
+    },
+    "calculate_eps": true
+  }
+]
