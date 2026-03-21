@@ -4,20 +4,21 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
-## [Unreleased]
-
-### Changed
-
-- **Motor Multi-Tarea**: Soporte para ejecutar múltiples consultas AQL en cada ciclo.
-- **Configuración Externa**: Las consultas y su mapeo a colecciones de MongoDB ahora viven en `queries.json`.
-- **Aislamiento de Errores**: Si una tarea falla, el script continúa con las demás del catálogo.
-- **Formato dinámico**: Mapeo flexible de columnas de QRadar a campos de MongoDB definido por tarea.
-- **Nueva métrica**: Añadida tarea `logsource_summary` con formato detallado solicitado por el usuario.
-- **Simplificación de configuración**: Se consolidaron `MINUTOS_INTERVALO` y `RUN_INTERVAL_SECONDS` en `SYNC_INTERVAL_MINUTES`.
+## [0.2.0-beta.2] - 2026-03-21
 
 ### Added
 
-- Nueva accion repair para corregir permisos de .env y reparar systemd sin reinstalacion completa.
+- **Motor Multi-Tarea**: Soporte para ejecutar múltiples consultas AQL en cada ciclo.
+- **Configuración Externa (`queries.json`)**: Las consultas y su mapeo a colecciones de MongoDB ahora se gestionan de forma externa sin tocar el código.
+- **Aislamiento de Errores**: Sistema robusto que permite que una tarea falle sin detener la ejecución de las demás.
+- **Formato Dinámico**: Mapeo flexible de columnas de QRadar a campos técnicos de MongoDB definido por tarea.
+- **Nueva métrica**: Añadida tarea `logsource_summary` con formato detallado y cálculo automático de EPS.
+
+### Changed
+
+- **Simplificación de configuración**: Consolidación definitiva de `MINUTOS_INTERVALO` y `RUN_INTERVAL_SECONDS` en la variable maestra `SYNC_INTERVAL_MINUTES`.
+- **Auto-sincronización**: El tiempo de espera del script ahora se calcula automáticamente basándose en los minutos de la ventana de consulta.
+- **Limpieza de `.env`**: Estructura simplificada y alineada con las mejores prácticas.
 
 ### Changed
 

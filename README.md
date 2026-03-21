@@ -8,14 +8,13 @@ Script en Python diseñado para extraer métricas de eventos desde **IBM QRadar*
 
 El script sigue un flujo de trabajo lineal y robusto para garantizar la integridad de los datos:
 
-1.  **Consulta AQL**: Genera una consulta Ariel Query Language (AQL) que agrupa el conteo de eventos por `domainid` (dominio/cliente) en una ventana de tiempo configurable (ej: últimos 60 minutos).
-2.  **Ejecución Ariel**: Envía la consulta a la API de QRadar y recibe un `search_id`.
-3.  **Polling de Estado**: Consulta periódicamente el estado de la búsqueda en QRadar hasta que el estado sea `COMPLETED`.
+1.  **Carga de Tareas**: Lee el archivo `queries.json` que contiene el catálogo de consultas AQL y sus destinos en MongoDB.
+2.  **Motor Multi-Consulta**: Por cada tarea definida, genera una consulta Ariel Query Language (AQL) usando la ventana de tiempo centralizada en el `.env`.
+3.  **Ejecución Ariel**: Envía cada consulta a la API de QRadar y monitoriza su estado de forma independiente.
 4.  **Cálculo de EPS**: 
     - Descarga los resultados JSON.
-    - Calcula el promedio de **Eventos Por Segundo (EPS)** dividiendo el total de eventos por los segundos de la ventana.
-    - Aplica una regla de negocio: si el EPS calculado es 0 pero hubo eventos, se fuerza a **1** para mantener visibilidad.
-5.  **Persistencia en MongoDB**: Transforma los datos al esquema de documentos del proyecto e inserta los resultados en lote (*batch*) en la colección configurada.
+    - Calcula el promedio de **Eventos Por Segundo (EPS)** automáticamente para cada tarea que lo requiera.
+5.  **Persistencia Dinámica**: Transforma los datos al esquema de documentos configurado e inserta los resultados en la **colección específica** de MongoDB definida para esa tarea.
 
 ---
 
