@@ -1,0 +1,46 @@
+BUSINESS SOURCE LICENSE 1.1
+
+License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved. 
+
+Change Date: 2029-01-01 
+Change License: MIT License
+
+Terms:
+
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor also grants you the right to use the Licensed Work in production environments, subject to the "Additional Use Grant" defined below.
+
+If your use is not permitted by the "Additional Use Grant", you must obtain a commercial license from the Licensor.
+
+On the Change Date, the Licensor will make available the Licensed Work under the Change License.
+
+Additional Use Grant
+Permitted Non-Commercial Use
+You may use the Licensed Work for:
+- Research purposes
+- Academic purposes
+- Evaluation purposes
+- Personal, non-commercial use
+- Internal business evaluation (not exceeding 90 days)
+
+Commercial Use Restrictions
+You may NOT use the Licensed Work for:
+- Integration into proprietary products for commercial distribution
+- Resale as a standalone product or as part of another product
+- Software-as-a-Service (SaaS) offerings
+- Direct or indirect monetization of the software
+- Deployment in production in commercial environments without a commercial license
+
+Permitted Services
+You ARE permitted to offer:
+- Installation services
+- Technical support and maintenance
+- Consulting and customization
+- Training and education
+- Hosting (provided the software itself is not sold as a product)
+
+Definition of Commercial Use
+"Commercial Use" means any use oriented towards commercial advantage or monetary compensation, including:
+- Use for paid services
+- Integration into sold or licensed products
+- Use in commercial production
+- Use as part of a SaaS platform

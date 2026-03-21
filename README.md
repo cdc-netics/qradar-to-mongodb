@@ -149,3 +149,9 @@ El sistema es extensible sin tocar el código Python. Para añadir una nueva mé
 ├── LINUX_SETUP.md         # Documentación detallada de despliegue
 └── README.md              # Documentación general
 ```
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo la licencia **Business Source License 1.1** (BSL). Consulte los archivos [LICENSE](LICENSE) (Inglés) y [LICENSE.es](LICENSE.es) (Español) para obtener más detalles sobre los términos de uso comercial y no comercial.

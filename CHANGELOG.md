@@ -13,6 +13,7 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 - **Aislamiento de Errores**: Sistema robusto que permite que una tarea falle sin detener la ejecución de las demás.
 - **Formato Dinámico**: Mapeo flexible de columnas de QRadar a campos técnicos de MongoDB definido por tarea.
 - **Nueva métrica**: Añadida tarea `logsource_summary` con formato detallado y cálculo automático de EPS.
+- **Licencia**: Se ha incorporado la licencia **Business Source License 1.1** al proyecto.
 
 ### Changed
 
