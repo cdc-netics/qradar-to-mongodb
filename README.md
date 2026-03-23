@@ -38,7 +38,7 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 | `MONGO_URI` | URI completa de conexión (Prioridad alta) | `mongodb://...` |
 | `MONGO_HOST` | Host de MongoDB | `localhost` |
 | `MONGO_DB` | Base de datos destino | `qradar_metrics` |
-| `MONGO_COLLECTION`| Colección destino | `eps_stats` |
+| `MONGO_COLLECTION`| Colección por defecto (se sobreescribe por `queries.json`) | `eps_stats` |
 | `SYNC_INTERVAL_MINUTES`| Ventana AQL y frecuencia (minutos) | `60` |
 | `APP_TIMEZONE` | Zona horaria para campos de fecha | `America/Santiago` |
 | `RUN_CONTINUOUS` | Ejecutar en bucle infinito | `true` |
@@ -113,15 +113,18 @@ El sistema es extensible sin tocar el código Python. Para añadir una nueva mé
 1.  **Edite `queries.json`**: Añada un nuevo objeto a la lista.
 2.  **Configure los campos**:
     - `id`: Identificador único de la tarea.
-    - `aql`: La consulta AQL (el script añade el tiempo automáticamente).
-    - `collection`: Nombre de la tabla en MongoDB. **necesitas crearla manualmente**, MongoDB no la va a crear.
-    - `mapping`: Asocia columnas de QRadar con campos de Mongo.
-3.  **Reinicie**: `sudo systemctl restart qradar-to-mongodb`
+    - `description`: Descripción breve de lo que hace la consulta.
+    - `aql`: La consulta AQL base. El script concatena automáticamente `LAST X MINUTES`.
+    - `collection`: **Nombre de la colección (tabla) de destino en MongoDB.** Cada consulta puede apuntar a una colección diferente. MongoDB la crea automáticamente si no existe.
+    - `mapping`: Diccionario que asocia las columnas del resultado AQL con los nombres de campo deseados en MongoDB.
+    - `calculate_eps`: Si es `true`, el script calcula y añade el campo `eps` al documento.
+3.  **Reinicie el servicio**: `sudo systemctl restart qradar-to-mongodb`
 
-#### Ejemplo de `queries.json`:
+#### Ejemplo de entrada en `queries.json`:
 ```json
- {
+{
     "id": "logsource_summary",
+    "description": "Resumen de eventos por tipo de fuente de log",
     "aql": "SELECT LOGSOURCETYPENAME(devicetype) AS type, SUM(eventcount) AS count FROM events GROUP BY devicetype",
     "collection": "logsource_summary",
     "mapping": {
@@ -129,8 +132,10 @@ El sistema es extensible sin tocar el código Python. Para añadir una nueva mé
       "count": "total_eventos"
     },
     "calculate_eps": true
-  }
+}
 ```
+
+> **Nota**: La variable `MONGO_DB` del `.env` define la base de datos, y el campo `collection` de cada tarea en `queries.json` define en qué colección (tabla) dentro de esa base de datos se guardan los resultados. No es necesario crear las colecciones previamente.
 
 ---
 
