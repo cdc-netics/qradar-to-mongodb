@@ -224,10 +224,12 @@ test_qradar_flow() {
 
     printf "  [2/2] API + Token ... "
     local http_code
+    # Usa /api/ariel/searches (GET) que es el mismo endpoint del script.
+    # Requiere solo permisos de Ariel, no de admin.
     http_code=$(curl -s -o /dev/null -w "%{http_code}" \
       --connect-timeout 10 --max-time 15 \
       -k -H "SEC: $token" -H "Accept: application/json" \
-      "https://${ip}/api/system/servers" 2>/dev/null || echo "000")
+      "https://${ip}/api/ariel/searches" 2>/dev/null || echo "000")
 
     case "$http_code" in
       200)
