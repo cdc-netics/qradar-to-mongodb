@@ -1,6 +1,6 @@
 # QRadar to MongoDB - Event Sync
 
-Script en Python diseñado para extraer métricas de eventos desde **IBM QRadar** (mediante consultas AQL) y persistirlas en **MongoDB** para su posterior análisis o visualización.
+Script en Python diseñado para extraer métricas de eventos desde una o **múltiples instancias de IBM QRadar** (mediante consultas AQL) y persistirlas en **MongoDB** para su posterior análisis o visualización.
 
 ---
 
@@ -8,13 +8,14 @@ Script en Python diseñado para extraer métricas de eventos desde **IBM QRadar*
 
 El script sigue un flujo de trabajo lineal y robusto para garantizar la integridad de los datos:
 
-1.  **Carga de Tareas**: Lee el archivo `queries.json` que contiene el catálogo de consultas AQL y sus destinos en MongoDB.
-2.  **Motor Multi-Consulta**: Por cada tarea definida, genera una consulta Ariel Query Language (AQL) usando la ventana de tiempo centralizada en el `.env`.
-3.  **Ejecución Ariel**: Envía cada consulta a la API de QRadar y monitoriza su estado de forma independiente.
-4.  **Cálculo de EPS**: 
+1.  **Descubrimiento de QRadar**: Detecta automáticamente todas las instancias configuradas en `.env` (`QRADAR_1_*`, `QRADAR_2_*`, ...).
+2.  **Carga de Tareas**: Lee el archivo `queries.json` que contiene el catálogo de consultas AQL y sus destinos en MongoDB.
+3.  **Motor Multi-Consulta**: Por cada instancia QRadar y cada tarea definida, genera y ejecuta una consulta AQL usando la ventana de tiempo centralizada.
+4.  **Ejecución Ariel**: Envía cada consulta a la API de QRadar y monitoriza su estado de forma independiente.
+5.  **Cálculo de EPS**: 
     - Descarga los resultados JSON.
     - Calcula el promedio de **Eventos Por Segundo (EPS)** automáticamente para cada tarea que lo requiera.
-5.  **Persistencia Dinámica**: Transforma los datos al esquema de documentos configurado e inserta los resultados en la **colección específica** de MongoDB definida para esa tarea.
+6.  **Persistencia Dinámica**: Transforma los datos al esquema configurado, agrega el campo `qradar_source` para identificar el origen, e inserta los resultados en la **colección específica** de MongoDB.
 
 ---
 
@@ -33,8 +34,9 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 
 | Variable | Descripción | Valor sugerido |
 | :--- | :--- | :--- |
-| `QRADAR_IP` | IP o Hostname de la consola QRadar | `10.1.2.3` |
-| `QRADAR_TOKEN` | Token SEC de QRadar | `xxxxxxxx-xxxx-...` |
+| `QRADAR_N_IP` | IP de la consola QRadar N (N=1,2,3...) | `10.1.2.3` |
+| `QRADAR_N_TOKEN` | Token SEC de la consola QRadar N | `xxxxxxxx-xxxx-...` |
+| `QRADAR_N_NAME` | Nombre descriptivo (opcional, default: `qradar_N`) | `qradar_principal` |
 | `MONGO_URI` | URI completa de conexión (Prioridad alta) | `mongodb://...` |
 | `MONGO_HOST` | Host de MongoDB | `localhost` |
 | `MONGO_DB` | Base de datos destino | `qradar_metrics` |
@@ -42,6 +44,8 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 | `SYNC_INTERVAL_MINUTES`| Ventana AQL y frecuencia (minutos) | `60` |
 | `APP_TIMEZONE` | Zona horaria para campos de fecha | `America/Santiago` |
 | `RUN_CONTINUOUS` | Ejecutar en bucle infinito | `true` |
+
+> **Nota**: Puede configurar múltiples instancias QRadar usando la convención numérica: `QRADAR_1_IP`, `QRADAR_1_TOKEN`, `QRADAR_2_IP`, `QRADAR_2_TOKEN`, etc. El script las detecta automáticamente.
 
 ---
 
@@ -97,7 +101,7 @@ Este comando:
 
 ## 🔍 Solución de Problemas (Troubleshooting)
 
-- **Error: search_id no devuelto**: Verifique que el `QRADAR_TOKEN` no haya expirado y que la `QRADAR_IP` sea accesible.
+- **Error: search_id no devuelto**: Verifique que el `QRADAR_N_TOKEN` no haya expirado y que la `QRADAR_N_IP` sea accesible.
 - **El script no inicia (ModuleNotFoundError)**: Asegúrese de estar ejecutando el script dentro del entorno virtual (`source .venv/bin/activate`).
 - **Fallas de conexión a MongoDB**: Verifique que `MONGO_USER` y `MONGO_PASSWORD` sean correctos o que la `MONGO_URI` no tenga errores de sintaxis. Use `repair` en el instalador si sospecha de permisos en `.env`.
 - **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
@@ -135,7 +139,21 @@ El sistema es extensible sin tocar el código Python. Para añadir una nueva mé
 }
 ```
 
-> **Nota**: La variable `MONGO_DB` del `.env` define la base de datos, y el campo `collection` de cada tarea en `queries.json` define en qué colección (tabla) dentro de esa base de datos se guardan los resultados. No es necesario crear las colecciones previamente.
+> **Nota**: La variable `MONGO_DB` del `.env` define la base de datos, y el campo `collection` de cada tarea en `queries.json` define en qué colección (tabla) dentro de esa base de datos se guardan los resultados. No es necesario crear las colecciones previamente. Cada documento incluye el campo `qradar_source` para identificar de qué instancia QRadar proviene.
+
+---
+
+## 🔗 Cómo agregar otra instancia QRadar
+
+Para conectar una nueva consola QRadar, solo agregue las variables al `.env`:
+
+```env
+QRADAR_2_NAME=qradar_datacenter_b
+QRADAR_2_IP=10.0.106.50
+QRADAR_2_TOKEN=tu-token-sec-aqui
+```
+
+El script auto-descubre todas las instancias (`QRADAR_1`, `QRADAR_2`, ..., `QRADAR_N`) y ejecuta todas las consultas de `queries.json` contra cada una. Los resultados se identifican en MongoDB mediante el campo `qradar_source`.
 
 ---
 

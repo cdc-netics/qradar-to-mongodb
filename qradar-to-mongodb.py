@@ -29,9 +29,9 @@ POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", 2))
 # número de intentos, el script asume un error o demora excesiva y aborta.
 MAX_POLL_ATTEMPTS = int(os.getenv("MAX_POLL_ATTEMPTS", 120))
 
-# Parámetros críticos para conectar con la consola de QRadar.
-QRADAR_IP = os.getenv("QRADAR_IP")
-SEC_TOKEN = os.getenv("QRADAR_TOKEN")  # Security Token (SEC) generado en QRadar.
+# La configuración de QRadar ahora se carga dinámicamente desde variables
+# QRADAR_1_IP, QRADAR_1_TOKEN, QRADAR_2_IP, QRADAR_2_TOKEN, etc.
+# Ver función load_qradars() más abajo.
 
 # Configuración de destino en MongoDB (URI o componentes separados).
 MONGO_URI = os.getenv("MONGO_URI")
@@ -70,14 +70,48 @@ RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", SYNC_INTERVAL_MINUT
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+def load_qradars():
+    """
+    Auto-descubre instancias QRadar desde variables de entorno.
+    Busca QRADAR_1_IP, QRADAR_2_IP, ... hasta que no encuentre más.
+    Retorna lista de dicts: [{"id": 1, "name": "...", "ip": "...", "token": "..."}]
+    """
+    qradars = []
+    n = 1
+    while True:
+        ip = os.getenv(f"QRADAR_{n}_IP")
+        if not ip:
+            break
+
+        token = os.getenv(f"QRADAR_{n}_TOKEN")
+        if not token:
+            raise ValueError(f"QRADAR_{n}_IP está definido pero falta QRADAR_{n}_TOKEN")
+
+        name = os.getenv(f"QRADAR_{n}_NAME", f"qradar_{n}")
+
+        qradars.append({
+            "id": n,
+            "name": name,
+            "ip": ip,
+            "token": token,
+        })
+        n += 1
+
+    if not qradars:
+        raise ValueError(
+            "No se encontraron instancias QRadar. "
+            "Defina al menos QRADAR_1_IP y QRADAR_1_TOKEN en el archivo .env"
+        )
+
+    return qradars
+
+
 def validate_required_env():
     """
     Verifica que las variables de entorno esenciales estén presentes.
     Lanza ValueError si falta información crítica antes de iniciar el proceso.
     """
     required = {
-        "QRADAR_IP": QRADAR_IP,
-        "QRADAR_TOKEN": SEC_TOKEN,
         "MONGO_DB": DB_NAME,
         "MONGO_COLLECTION": COLLECTION_NAME,
     }
@@ -90,6 +124,9 @@ def validate_required_env():
 
     # Validar también que la configuración de MongoDB sea coherente.
     get_mongo_uri()
+
+    # Validar que hay al menos una instancia QRadar configurada.
+    load_qradars()
 
 
 def get_mongo_uri():
@@ -193,12 +230,12 @@ def get_time_context():
 
 # --- PASO 5: Motor de Ejecución Multi-Tarea ---
 
-def process_task(task, headers, base_url, mongo_uri):
+def process_task(task, headers, base_url, mongo_uri, qradar_name):
     """
-    Procesa una tarea individual definida en queries.json.
+    Procesa una tarea individual definida en queries.json contra una instancia QRadar.
     """
     task_id = task.get("id", "unnamed_task")
-    print(f"\n>>> PROCESANDO TAREA: {task_id}")
+    print(f"\n>>> PROCESANDO TAREA: {task_id} (QRadar: {qradar_name})")
     
     # 1. Preparar Query AQL con el intervalo actual.
     raw_aql = task.get("aql")
@@ -270,6 +307,7 @@ def process_task(task, headers, base_url, mongo_uri):
                 "hora": ahora_local.strftime("%H:00"),
                 "hora_minuto": ahora_local.strftime("%H:%M"),
                 "timezone": APP_TIMEZONE,
+                "qradar_source": qradar_name,
             }
 
             # Aplicar mapeo de columnas dinámicamente.
@@ -303,12 +341,12 @@ def process_task(task, headers, base_url, mongo_uri):
 
 def run_sync_cycle():
     """
-    Coordina un ciclo completo de sincronización para todas las tareas.
+    Coordina un ciclo completo de sincronización para todas las tareas
+    contra todas las instancias QRadar configuradas.
     """
     validate_required_env()
     mongo_uri = get_mongo_uri()
-    headers = {"SEC": SEC_TOKEN, "Accept": "application/json"}
-    base_url = f"https://{QRADAR_IP}/api/ariel/searches"
+    qradars = load_qradars()
 
     # Cargar catálogo de queries.
     config_path = os.path.join(os.path.dirname(__file__), "queries.json")
@@ -323,9 +361,20 @@ def run_sync_cycle():
         print(f"Error cargando queries.json: {e}")
         return
 
-    # Ejecutar cada tarea secuencialmente.
-    for task in tasks:
-        process_task(task, headers, base_url, mongo_uri)
+    print(f"Instancias QRadar detectadas: {len(qradars)}")
+
+    # Iterar sobre cada instancia QRadar.
+    for qr in qradars:
+        print(f"\n{'='*60}")
+        print(f"CONECTANDO A: {qr['name']} ({qr['ip']})")
+        print(f"{'='*60}")
+
+        headers = {"SEC": qr["token"], "Accept": "application/json"}
+        base_url = f"https://{qr['ip']}/api/ariel/searches"
+
+        # Ejecutar cada tarea secuencialmente contra esta instancia.
+        for task in tasks:
+            process_task(task, headers, base_url, mongo_uri, qr["name"])
 
 
 def run_scheduler():
@@ -354,11 +403,6 @@ def run_scheduler():
         
         print(f"\nSiguiente ciclo en {RUN_INTERVAL_SECONDS} segundos...")
         time.sleep(RUN_INTERVAL_SECONDS)
-
-
-# --- PUNTO DE ENTRADA ---
-if __name__ == "__main__":
-    run_scheduler()
 
 
 # --- PUNTO DE ENTRADA ---

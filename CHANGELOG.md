@@ -4,6 +4,24 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
+## [0.3.0-beta.1] - 2026-03-23
+
+### Added
+
+- **Soporte Multi-QRadar**: El script ahora puede conectarse a múltiples instancias de QRadar en un mismo ciclo de sincronización.
+- **Auto-descubrimiento**: Nueva función `load_qradars()` que detecta automáticamente todas las instancias configuradas (`QRADAR_1_*`, `QRADAR_2_*`, ..., `QRADAR_N_*`).
+- **Campo `qradar_source`**: Cada documento insertado en MongoDB incluye un nuevo campo que identifica la instancia QRadar de origen.
+
+### Changed
+
+- **Migración de variables de entorno**: `QRADAR_IP` y `QRADAR_TOKEN` reemplazados por convención numérica (`QRADAR_1_IP`, `QRADAR_1_TOKEN`, `QRADAR_1_NAME`, etc.).
+- **Validación actualizada**: `validate_required_env()` ya no busca variables únicas de QRadar; delega la validación a `load_qradars()`.
+
+### Removed
+
+- Variables `QRADAR_IP` y `QRADAR_TOKEN` del `.env` (migradas a formato multi-instancia).
+- Bloque `__main__` duplicado al final del script.
+
 ## [0.2.0-beta.2] - 2026-03-21
 
 ### Added
