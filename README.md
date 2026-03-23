@@ -23,8 +23,17 @@ El script sigue un flujo de trabajo lineal y robusto para garantizar la integrid
 
 - **Sistema Operativo**: Linux (Ubuntu, Debian, RHEL, Rocky, AlmaLinux).
 - **Python**: Versión 3.10 o superior.
-- **Conectividad**: Acceso HTTPS (puerto 443) a la consola de QRadar y conectividad al puerto de MongoDB (default 27017).
+- **Conectividad**: Acceso de red a las consolas QRadar y al servidor MongoDB.
 - **QRadar**: Un *Security Token* (SEC) con permisos para ejecutar búsquedas Ariel.
+
+### Puertos de Red Requeridos
+
+| Origen | Destino | Puerto | Protocolo | Descripción |
+| :--- | :--- | :---: | :---: | :--- |
+| Servidor del script | Cada consola QRadar | **443** | TCP/HTTPS | API REST Ariel Searches |
+| Servidor del script | Servidor MongoDB | **27017** | TCP | Conexión a la base de datos (configurable con `MONGO_PORT`) |
+
+> **Firewall**: Asegúrese de que estos puertos estén abiertos **desde** el servidor donde corre el script **hacia** cada QRadar y MongoDB.
 
 ---
 
