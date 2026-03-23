@@ -11,6 +11,7 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 - **Soporte Multi-QRadar**: El script ahora puede conectarse a múltiples instancias de QRadar en un mismo ciclo de sincronización.
 - **Auto-descubrimiento**: Nueva función `load_qradars()` que detecta automáticamente todas las instancias configuradas (`QRADAR_1_*`, `QRADAR_2_*`, ..., `QRADAR_N_*`).
 - **Campo `qradar_source`**: Cada documento insertado en MongoDB incluye un nuevo campo que identifica la instancia QRadar de origen.
+- **Test de conectividad**: Nueva opción 4 en el instalador (`test`) que prueba ping y token de todas las instancias QRadar configuradas.
 
 ### Changed
 

@@ -84,6 +84,7 @@ Acciones disponibles:
   1) install   -> Prepara venv, dependencias, .env, systemd y arranca el servicio.
   2) repair    -> Corrige permisos de .env, reescribe el unit file y reinicia.
   3) uninstall -> Detiene/desactiva el servicio y elimina el unit file de forma segura.
+  4) test      -> Prueba conectividad y token de todas las instancias QRadar.
 EOF
 }
 
@@ -151,12 +152,125 @@ repair_env_permissions() {
 
 # Escanea el .env buscando valores de ejemplo que aún no han sido cambiados.
 validate_env_placeholders() {
-  if grep -q "replace-with-qradar-token" "$APP_DIR/.env"; then
-    warn "Detectado placeholder en QRADAR_TOKEN. El servicio fallará hasta que lo cambie."
+  if grep -q "replace-with.*token" "$APP_DIR/.env"; then
+    warn "Detectado placeholder en un QRADAR_TOKEN. El servicio fallará hasta que lo cambie."
   fi
 
   if grep -q "^MONGO_PASSWORD=$" "$APP_DIR/.env"; then
     warn "MONGO_PASSWORD parece estar vacío en el archivo .env."
+  fi
+}
+
+# Prueba de conectividad y validación de token para todas las instancias QRadar.
+test_qradar_flow() {
+  log "Iniciando prueba de conectividad QRadar..."
+
+  if [[ ! -f "$APP_DIR/.env" ]]; then
+    err "No se encontró $APP_DIR/.env — No se puede leer la configuración QRadar."
+    exit 1
+  fi
+
+  # Cargar variables del .env (sin exportar al entorno global del shell).
+  local env_content
+  env_content=$(grep -v '^#' "$APP_DIR/.env" | grep -v '^$')
+
+  local n=1
+  local found=0
+  local passed=0
+  local failed=0
+
+  while true; do
+    # Extraer QRADAR_N_IP del archivo .env
+    local ip_var="QRADAR_${n}_IP"
+    local token_var="QRADAR_${n}_TOKEN"
+    local name_var="QRADAR_${n}_NAME"
+
+    local ip=$(echo "$env_content" | grep "^${ip_var}=" | head -1 | cut -d'=' -f2-)
+    local token=$(echo "$env_content" | grep "^${token_var}=" | head -1 | cut -d'=' -f2-)
+    local name=$(echo "$env_content" | grep "^${name_var}=" | head -1 | cut -d'=' -f2-)
+
+    # Si no encontramos IP, terminamos el escaneo.
+    if [[ -z "$ip" ]]; then
+      break
+    fi
+
+    found=$((found + 1))
+    name="${name:-qradar_$n}"
+
+    printf "\n─────────────────────────────────────\n"
+    printf "  QRadar #%d: %s (%s)\n" "$n" "$name" "$ip"
+    printf "─────────────────────────────────────\n"
+
+    # --- Test 1: Ping (conectividad de red) ---
+    printf "  [1/2] Ping a %s ... " "$ip"
+    if ping -c 2 -W 3 "$ip" >/dev/null 2>&1; then
+      printf "✅ OK\n"
+    else
+      printf "❌ SIN RESPUESTA\n"
+      warn "No se puede alcanzar $ip. Verifique la red o firewall."
+      failed=$((failed + 1))
+      n=$((n + 1))
+      continue
+    fi
+
+    # --- Test 2: API + Token (HTTPS a la API de QRadar) ---
+    if [[ -z "$token" ]]; then
+      printf "  [2/2] Token ... ❌ NO CONFIGURADO\n"
+      warn "$token_var esta vacío o no existe en .env"
+      failed=$((failed + 1))
+      n=$((n + 1))
+      continue
+    fi
+
+    printf "  [2/2] API + Token ... "
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+      --connect-timeout 10 --max-time 15 \
+      -k -H "SEC: $token" -H "Accept: application/json" \
+      "https://${ip}/api/system/servers" 2>/dev/null || echo "000")
+
+    case "$http_code" in
+      200)
+        printf "✅ OK (HTTP %s)\n" "$http_code"
+        passed=$((passed + 1))
+        ;;
+      401|403)
+        printf "❌ TOKEN INVÁLIDO (HTTP %s)\n" "$http_code"
+        warn "El token de $name fue rechazado. Verifique que sea correcto y no haya expirado."
+        failed=$((failed + 1))
+        ;;
+      000)
+        printf "❌ SIN CONEXIÓN HTTPS (HTTP %s)\n" "$http_code"
+        warn "No se pudo conectar al puerto 443 de $ip. Verifique firewall / certificados."
+        failed=$((failed + 1))
+        ;;
+      *)
+        printf "⚠️  RESPUESTA INESPERADA (HTTP %s)\n" "$http_code"
+        warn "Respuesta no esperada de $ip. Puede ser un problema temporal."
+        failed=$((failed + 1))
+        ;;
+    esac
+
+    n=$((n + 1))
+  done
+
+  # --- Resumen final ---
+  printf "\n=============================================\n"
+  if [[ $found -eq 0 ]]; then
+    err "No se encontraron instancias QRadar en $APP_DIR/.env"
+    err "Asegúrese de definir al menos QRADAR_1_IP y QRADAR_1_TOKEN"
+    exit 1
+  fi
+
+  printf " RESULTADO: %d instancias encontradas\n" "$found"
+  printf "   ✅ Exitosas: %d\n" "$passed"
+  printf "   ❌ Fallidas:  %d\n" "$failed"
+  printf "=============================================\n"
+
+  if [[ $failed -gt 0 ]]; then
+    warn "Algunas instancias fallaron. Revise los mensajes anteriores."
+  else
+    log "¡Todas las instancias QRadar están accesibles y autenticadas!"
   fi
 }
 
@@ -287,7 +401,8 @@ prompt_action() {
     printf "  1) Instalar / Actualizar servicio\n" >&2
     printf "  2) Reparar permisos/servicio (Seguro)\n" >&2
     printf "  3) Desinstalar servicio (Seguro)\n" >&2
-    read -r -p "Opción [1/2/3]: " choice
+    printf "  4) Probar conectividad QRadar\n" >&2
+    read -r -p "Opción [1/2/3/4]: " choice
 
     normalized="$(normalize_action "$choice")"
     if [[ -n "$normalized" ]]; then
@@ -315,6 +430,7 @@ normalize_action() {
     1|install)   echo "install" ;;
     2|repair)    echo "repair" ;;
     3|uninstall) echo "uninstall" ;;
+    4|test)      echo "test" ;;
     *)           echo "" ;;
   esac
 }
@@ -349,9 +465,10 @@ main() {
     install)   install_flow ;;
     repair)    repair_flow ;;
     uninstall) uninstall_flow ;;
+    test)      test_qradar_flow ;;
     *)
       err "Acción desconocida: $raw_action"
-      err "Uso: sudo $0 [install|repair|uninstall|1|2|3]"
+      err "Uso: sudo $0 [install|repair|uninstall|test|1|2|3|4]"
       exit 1
       ;;
   esac
