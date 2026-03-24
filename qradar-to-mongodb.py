@@ -42,7 +42,7 @@ DEBUG_TXT_FILE = os.getenv("DEBUG_TXT_FILE", "debug_qradar_output.txt")
 
 # Control de ejecución continua
 RUN_CONTINUOUS = os.getenv("RUN_CONTINUOUS", "false").strip().lower() == "true"
-RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", SYNC_INTERVAL_MINUTES * 60))
+RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", 60))
 
 # Silenciar advertencias de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
