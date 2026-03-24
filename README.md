@@ -108,6 +108,35 @@ Este comando:
 
 ---
 
+## 🔌 Test de Conectividad QRadar
+
+Para verificar rápidamente que todas las instancias QRadar configuradas en `.env` son alcanzables y sus tokens son válidos:
+
+```bash
+sudo ./scripts/install_service.sh test
+# o seleccionar opción 4 del menú interactivo
+```
+
+El test realiza dos pruebas por cada instancia:
+1. **Ping** — Verifica conectividad de red a la IP.
+2. **API + Token** — Hace un request HTTPS al endpoint `/api/help/versions` para validar que el token SEC funciona.
+
+Ejemplo de salida:
+```
+─────────────────────────────────────
+  QRadar #1: qradar_principal (10.0.105.100)
+─────────────────────────────────────
+  [1/2] Ping a 10.0.105.100 ... ✅ OK
+  [2/2] API + Token ... ✅ OK (HTTP 200)
+=============================================
+ RESULTADO: 1 instancias encontradas
+   ✅ Exitosas: 1
+   ❌ Fallidas:  0
+=============================================
+```
+
+---
+
 ## 🔍 Solución de Problemas (Troubleshooting)
 
 - **Error: search_id no devuelto**: Verifique que el `QRADAR_N_TOKEN` no haya expirado y que la `QRADAR_N_IP` sea accesible.

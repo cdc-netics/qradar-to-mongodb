@@ -13,8 +13,8 @@
   {
     "id": "logsource_summary",
     "description": "Resumen detallado de eventos por tipo y nombre de fuente de log",
-    "aql": "SELECT LOGSOURCETYPENAME(devicetype) AS log_type, LOGSOURCENAME(logsourceid) AS log_name, SUM(eventcount) AS total, DOMAINNAME(domainid) AS client FROM events GROUP BY logsourceid, domainid, devicetype ORDER BY total DESC",
     "collection": "logsource_summary",
+    "aql": "SELECT LOGSOURCETYPENAME(devicetype) AS log_type, LOGSOURCENAME(logsourceid) AS log_name, SUM(eventcount) AS total, DOMAINNAME(domainid) AS client FROM events WHERE (log_type <> 'Health Metrics' AND log_type <> 'SIM Audit') AND log_type <> 'System Notification' GROUP BY logsourceid, domainid, devicetype ORDER BY total DESC",
     "mapping": {
       "log_type": "log_source_type",
       "log_name": "log_source",
