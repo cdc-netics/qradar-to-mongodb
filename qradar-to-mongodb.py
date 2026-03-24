@@ -88,12 +88,14 @@ def load_qradars():
             raise ValueError(f"QRADAR_{n}_IP está definido pero falta QRADAR_{n}_TOKEN")
 
         name = os.getenv(f"QRADAR_{n}_NAME", f"qradar_{n}")
+        default_domain_alias = os.getenv(f"QRADAR_{n}_DEFAULT_DOMAIN_ALIAS")
 
         qradars.append({
             "id": n,
             "name": name,
             "ip": ip,
             "token": token,
+            "default_domain_alias": default_domain_alias,
         })
         n += 1
 
@@ -113,7 +115,6 @@ def validate_required_env():
     """
     required = {
         "MONGO_DB": DB_NAME,
-        "MONGO_COLLECTION": COLLECTION_NAME,
     }
 
     # Identificar claves nulas o vacías.
@@ -228,13 +229,28 @@ def get_time_context():
     return now_utc, now_local
 
 
+def normalize_client_name(raw_client, qradar):
+    """
+    Evita colisiones entre múltiples QRadar cuando el dominio devuelto es
+    'Default Domain' y se configuró un alias por instancia.
+    """
+    if not isinstance(raw_client, str):
+        return raw_client
+
+    if raw_client.strip().lower() != "default domain":
+        return raw_client
+
+    return qradar.get("default_domain_alias") or qradar.get("name", raw_client)
+
+
 # --- PASO 5: Motor de Ejecución Multi-Tarea ---
 
-def process_task(task, headers, base_url, mongo_uri, qradar_name):
+def process_task(task, headers, base_url, mongo_uri, qradar):
     """
     Procesa una tarea individual definida en queries.json contra una instancia QRadar.
     """
     task_id = task.get("id", "unnamed_task")
+    qradar_name = qradar["name"]
     print(f"\n>>> PROCESANDO TAREA: {task_id} (QRadar: {qradar_name})")
     
     # 1. Preparar Query AQL con el intervalo actual.
@@ -244,7 +260,7 @@ def process_task(task, headers, base_url, mongo_uri, qradar_name):
         return
     
     aql_query = f"{raw_aql} LAST {SYNC_INTERVAL_MINUTES} MINUTES"
-    collection_name = task.get("collection", "default_collection")
+    collection_name = task.get("collection", COLLECTION_NAME or "default_collection")
     mapping = task.get("mapping", {})
     do_eps = task.get("calculate_eps", False)
 
@@ -314,6 +330,10 @@ def process_task(task, headers, base_url, mongo_uri, qradar_name):
             for q_col, db_field in mapping.items():
                 if q_col in row:
                     doc[db_field] = row[q_col]
+
+            if "cliente" in doc:
+                doc["cliente_original"] = doc["cliente"]
+                doc["cliente"] = normalize_client_name(doc["cliente"], qradar)
             
             # Lógica especial para EPS si se requiere.
             if do_eps:
@@ -374,7 +394,7 @@ def run_sync_cycle():
 
         # Ejecutar cada tarea secuencialmente contra esta instancia.
         for task in tasks:
-            process_task(task, headers, base_url, mongo_uri, qr["name"])
+            process_task(task, headers, base_url, mongo_uri, qr)
 
 
 def run_scheduler():
@@ -407,4 +427,4 @@ def run_scheduler():
 
 # --- PUNTO DE ENTRADA ---
 if __name__ == "__main__":
-    run_scheduler()
+    run_scheduler()

@@ -46,6 +46,7 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 | `QRADAR_N_IP` | IP de la consola QRadar N (N=1,2,3...) | `10.1.2.3` |
 | `QRADAR_N_TOKEN` | Token SEC de la consola QRadar N | `xxxxxxxx-xxxx-...` |
 | `QRADAR_N_NAME` | Nombre descriptivo (opcional, default: `qradar_N`) | `qradar_principal` |
+| `QRADAR_N_DEFAULT_DOMAIN_ALIAS` | Alias para reemplazar "Default Domain" (opcional) | `NombreCliente` |
 | `MONGO_URI` | URI completa de conexión (Prioridad alta) | `mongodb://...` |
 | `MONGO_HOST` | Host de MongoDB | `localhost` |
 | `MONGO_DB` | Base de datos destino | `qradar_metrics` |
@@ -189,9 +190,13 @@ Para conectar una nueva consola QRadar, solo agregue las variables al `.env`:
 QRADAR_2_NAME=qradar_datacenter_b
 QRADAR_2_IP=10.0.106.50
 QRADAR_2_TOKEN=tu-token-sec-aqui
+# (Opcional) Alias para el "Default Domain" de este QRadar
+#QRADAR_2_DEFAULT_DOMAIN_ALIAS=NombreCliente
 ```
 
 El script auto-descubre todas las instancias (`QRADAR_1`, `QRADAR_2`, ..., `QRADAR_N`) y ejecuta todas las consultas de `queries.json` contra cada una. Los resultados se identifican en MongoDB mediante el campo `qradar_source`.
+
+> **Nota sobre "Default Domain"**: QRadar siempre devuelve `"Default Domain"` como nombre de cliente cuando no hay dominios personalizados (limitación de IBM). Para evitar colisiones entre instancias, el script reemplaza automáticamente este valor por el `QRADAR_N_NAME`. Si necesita un nombre distinto, use `QRADAR_N_DEFAULT_DOMAIN_ALIAS`. El valor original se preserva en el campo `cliente_original`.
 
 ---
 

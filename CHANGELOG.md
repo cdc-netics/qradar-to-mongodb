@@ -4,6 +4,20 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
+## [0.3.1-beta.1] - 2026-03-24
+
+### Added
+
+- **Normalización de "Default Domain"**: Cuando QRadar devuelve `"Default Domain"` como nombre de cliente (limitación de IBM), el script lo reemplaza automáticamente por el `QRADAR_N_NAME` configurado en `.env`.
+- **Variable `QRADAR_N_DEFAULT_DOMAIN_ALIAS`**: Nueva variable opcional por instancia que permite definir un alias personalizado para el "Default Domain" de cada QRadar. Si no se define, se usa `QRADAR_N_NAME` por defecto.
+- **Campo `cliente_original`**: Se preserva el valor original devuelto por QRadar antes de la normalización, para trazabilidad.
+
+### Fixed
+
+- **Colisión de datos entre múltiples QRadar**: Resuelto problema donde dos instancias QRadar con clientes en "Default Domain" mezclaban sus datos en MongoDB al compartir el mismo nombre de cliente.
+
+---
+
 ## [0.3.0-beta.1] - 2026-03-23
 
 ### Added
