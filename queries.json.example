@@ -21,6 +21,7 @@
     "interval_minutes": 5,
     "clear_before_sync": true,
     "params": {
+      "_filter_note": "OJO: QRadar API prefiere 'magnitude > 4' o >= numero. Evitar >= o => si dan error.",
       "filter": "status=\"open\" and magnitude > 4",
       "sort": "-magnitude"
     },
