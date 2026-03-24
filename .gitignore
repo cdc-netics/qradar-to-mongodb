@@ -13,6 +13,8 @@ env/
 documentacion.md
 .env.*
 !.env.example
+queries.json
+!queries.json.example
 
 # Build and packaging
 build/

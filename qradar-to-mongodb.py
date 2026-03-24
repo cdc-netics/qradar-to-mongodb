@@ -152,15 +152,15 @@ def process_task(task, headers, qr_ip, mongo_uri, qradar):
             if not isinstance(data, list): data = [data]
 
         # --- CARGA A MONGODB ---
-        if data:
-            client = MongoClient(mongo_uri)
-            col = client[DB_NAME][collection_name]
-            
-            # Borrado previo si el usuario lo solicita (sobrescritura por instancia)
-            if task.get("clear_before_sync"):
-                print(f"Limpiando registros previos de '{qradar_name}' en '{collection_name}'...")
-                col.delete_many({"qradar_source": qradar_name})
+        client = MongoClient(mongo_uri)
+        col = client[DB_NAME][collection_name]
+        
+        # Borrado previo independiente de si trajo datos nuevos o no
+        if task.get("clear_before_sync"):
+            print(f"Limpiando registros previos de '{qradar_name}' en '{collection_name}'...")
+            col.delete_many({"qradar_source": qradar_name})
 
+        if data:
             ahora_utc, ahora_local = get_time_context()
             docs = []
             for row in data:
@@ -175,7 +175,6 @@ def process_task(task, headers, qr_ip, mongo_uri, qradar):
                 for q_key, db_key in mapping.items():
                     if q_key in row:
                         val = row[q_key]
-                        # Normalizar si el campo mapeado es cliente o dominio
                         if db_key in ["cliente", "dominio_id", "dominio"]:
                             val = normalize_domain_field(val, task, qradar)
                         doc[db_key] = val
@@ -188,9 +187,10 @@ def process_task(task, headers, qr_ip, mongo_uri, qradar):
             
             col.insert_many(docs)
             print(f"Éxito: {len(docs)} registros insertados.")
-            client.close()
         else:
-            print("Sin datos en este ciclo.")
+            print("Sin datos nuevos en este ciclo.")
+
+        client.close()
 
     except Exception as e:
         print(f"FALLA EN TAREA '{task_id}': {e}")
