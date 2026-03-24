@@ -3,6 +3,7 @@ import requests
 import time
 import urllib3
 import json
+import argparse
 from urllib.parse import quote_plus
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -164,8 +165,12 @@ def process_task(task, headers, qr_ip, mongo_uri, qradar):
             docs = []
             for row in data:
                 doc = {
-                    "fecha": ahora_utc, "dia": ahora_local.strftime("%Y-%m-%d"),
-                    "hora": ahora_local.strftime("%H:00"), "qradar_source": qradar_name
+                    "fecha": ahora_utc,
+                    "dia": ahora_local.strftime("%Y-%m-%d"),
+                    "hora": ahora_local.strftime("%H:00"),
+                    "hora_minuto": ahora_local.strftime("%H:%M"),
+                    "timezone": APP_TIMEZONE,
+                    "qradar_source": qradar_name
                 }
                 for q_key, db_key in mapping.items():
                     if q_key in row:
@@ -190,7 +195,7 @@ def process_task(task, headers, qr_ip, mongo_uri, qradar):
     except Exception as e:
         print(f"FALLA EN TAREA '{task_id}': {e}")
 
-def run_sync_cycle():
+def run_sync_cycle(target_task_id=None):
     validate_env_basic()
     qradars = load_qradars()
     m_uri = get_mongo_uri()
@@ -205,25 +210,39 @@ def run_sync_cycle():
         
         for t in tasks:
             t_id = t.get("id", "unnamed")
-            interval = int(t.get("interval_minutes", SYNC_INTERVAL_MINUTES))
-            last = LAST_RUNS[qr_n].get(t_id)
-            ahora = datetime.now()
             
-            if last and (ahora - last).total_seconds() < (interval * 60 - 5):
+            # Filtro por línea de comandos para testing aislado
+            if target_task_id and t_id != target_task_id:
                 continue
+            
+            # Si forzamos una tarea, ignoramos la espera. Si no, respetamos el intervalo.
+            if not target_task_id:
+                interval = int(t.get("interval_minutes", SYNC_INTERVAL_MINUTES))
+                last = LAST_RUNS[qr_n].get(t_id)
+                ahora = datetime.now()
+                
+                if last and (ahora - last).total_seconds() < (interval * 60 - 5):
+                    continue
                 
             task_headers = headers.copy()
             if "headers" in t:
                 task_headers.update(t["headers"])
             
             process_task(t, task_headers, qr["ip"], m_uri, qr)
-            LAST_RUNS[qr_n][t_id] = ahora
+            LAST_RUNS[qr_n][t_id] = datetime.now()
 
 def validate_env_basic():
     if not DB_NAME: raise ValueError("Falta MONGO_DB en .env")
 
 if __name__ == "__main__":
-    if not RUN_CONTINUOUS:
+    parser = argparse.ArgumentParser(description="QRadar to MongoDB Sync")
+    parser.add_argument("--task", help="Ejecuta solo la tarea indicada (ej: offenses_sync) de inmediato", default=None)
+    args = parser.parse_args()
+
+    if args.task:
+        print(f"Modo forzado: Ejecutando ÚNICAMENTE la tarea '{args.task}'")
+        run_sync_cycle(target_task_id=args.task)
+    elif not RUN_CONTINUOUS:
         run_sync_cycle()
     else:
         print(f"MOTOR ACTIVO - Ciclo: {RUN_INTERVAL_SECONDS}s")

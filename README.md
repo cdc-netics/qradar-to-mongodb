@@ -1,7 +1,12 @@
 # QRadar to MongoDB - Event Sync
 
-Script en Python diseñado para extraer métricas de eventos desde una o **múltiples instancias de IBM QRadar** (mediante consultas AQL) y persistirlas en **MongoDB** para su posterior análisis o visualización.
+Sincronización automatizada de eventos (AQL) y alertas/ofensas (API REST) desde múltiples instancias de IBM QRadar hacia MongoDB. Diseñado con una arquitectura multi-tarea guiada por configuración (JSON), ideal para consolas SIEM distribuidas o entornos con múltiples arrendatarios (MSSP).
 
+## Novedades Recientes (v0.4.0)
+- **Multi-Protocolo**: Ahora soporta consultas SQL (AQL) y llamadas directas a la API REST (ej. Ofensas).
+- **Intervalos Independientes**: Las métricas globales pueden actualizarse cada hora, mientras las ofensas se revisan cada 5 minutos de forma paralela.
+- **Mapeo Multi-QRadar**: Soporta múltiples QRadars, traduciendo dinámicamente el `domain_id` o el `cliente` al nombre comercial de la empresa correspondiente sin conflictos.
+- **Testing Aislado**: Soporte para `--task <id>` en consola para probar integraciones específicas al instante.
 ---
 
 ## 🏗️ Cómo funciona (Arquitectura del Proceso)
@@ -83,11 +88,17 @@ Si usó el instalador automático, puede gestionar el proceso como un servicio e
 sudo systemctl status qradar-to-mongodb
 
 # Ver logs en tiempo real
-sudo journalctl -u qradar-to-mongodb -f
+sEl script puede ejecutarse interactuando con el programador o ejecutando tareas específicas al instante:
 
-# Reiniciar tras un cambio en el .env
-sudo systemctl restart qradar-to-mongodb
+```bash
+# 1. Ejecutar el ciclo completo una vez frente a todas las instancias (cron mode).
+python3 qradar-to-mongodb.py
+
+# 2. Ejecutar SOLO UNA tarea ignorando intervalos (ideal para pruebas y debug).
+python3 qradar-to-mongodb.py --task offenses_sync
 ```
+
+Si desea ejecución continua (daemon), asegúrese de tener `RUN_CONTINUOUS=true` en su `.env`. El servicio evaluará independientemente los intervalos (`interval_minutes`) de cada tarea definida en `queries.json`.
 
 ---
 

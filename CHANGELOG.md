@@ -4,6 +4,19 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
+## [v0.4.0] - 2026-03-24
+
+### Añadido
+- **Soporte API REST**: El motor ahora soporta tareas de tipo `"rest_api"`, permitiendo sincronizar recursos nativos como Ofensas (`/api/siem/offenses`).
+- **Intervalos Independientes**: Soporte para `interval_minutes` en `queries.json`, permitiendo que AQL y REST corran en ciclos de tiempo completamente distintos.
+- **Filtro CLI (`--task`)**: Argumento de línea de comandos para aislar y forzar la ejecución inmediata de una única tarea (ideal para testing y debug).
+- **Mapeo de Dominios por Instancia**: Nueva propiedad `domain_mapping` en `queries.json` para traducir IDs numéricos a nombres de cliente, diferenciando lógicamente entre múltiples QRadars.
+- **Sobrescritura Inteligente**: Nueva opción `clear_before_sync` que purga los datos anteriores de MongoDB **solo para el QRadar conectado**, manteniendo colecciones limpias como en el caso de las Ofensas "OPEN".
+- **Cabeceras Personalizadas**: Soporte para pasar `headers` específicos por tarea en `queries.json` (ej. `Version`, `Range`).
+
+### Cambiado
+- El bucle de ejecución continua (`RUN_CONTINUOUS`) ahora despierta cada 60 segundos (o lo que dicte `RUN_INTERVAL_SECONDS`) para evaluar de forma granular si le toca el turno a alguna tarea de intervalo corto.
+
 ## [0.3.1-beta.1] - 2026-03-24
 
 ### Added
