@@ -185,21 +185,43 @@ setup_log_file() {
   log "Permisos aplicados: owner=$SERVICE_USER:$SERVICE_GROUP modo=640"
 }
 
-# Asegura que WAIT_ON_START=true quede activo en .env al instalar.
+# Pregunta al usuario si desea activar WAIT_ON_START y actualiza el .env.
 # Evita que el primer ciclo inmediato tras un restart genere datos duplicados.
 ensure_wait_on_start() {
   if [[ ! -f "$APP_DIR/.env" ]]; then
     return
   fi
 
-  if grep -qE '^WAIT_ON_START=' "$APP_DIR/.env"; then
-    # La variable ya existe: reemplazar su valor por true
-    sed -i 's/^WAIT_ON_START=.*/WAIT_ON_START=true/' "$APP_DIR/.env"
-    log "WAIT_ON_START=true activado en .env (evita datos duplicados al reiniciar)."
+  local interval_mins
+  interval_mins=$(grep -E '^SYNC_INTERVAL_MINUTES=' "$APP_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+  interval_mins="${interval_mins:-60}"
+
+  printf "\n─────────────────────────────────────────────────────────\n"
+  printf " ¿Cómo debe comportarse el servicio al iniciar/reiniciar?\n"
+  printf "─────────────────────────────────────────────────────────\n"
+  printf "  [1] Esperar antes de consultar  \u2190 RECOMENDADO\n"
+  printf "      Cada tarea respeta su propio intervalo (REST API: sus minutos, AQL: %s min)\n" "$interval_mins"
+  printf "      No suma datos duplicados al reiniciar\n\n"
+  printf "  [2] Consultar inmediatamente al arrancar\n"
+  printf "      Puede generar datos duplicados si hubo restart reciente\n\n"
+
+  local choice
+  read -r -p "Opción [1/2] (default: 1): " choice
+  choice="${choice,,}"
+
+  local new_value
+  if [[ "$choice" == "2" ]]; then
+    new_value="false"
+    log "WAIT_ON_START=false — consultará de inmediato al arrancar."
   else
-    # La variable no existe: agregarla al final
-    printf '\n# Espera un intervalo antes del primer ciclo para evitar datos duplicados al reiniciar\nWAIT_ON_START=true\n' >> "$APP_DIR/.env"
-    log "WAIT_ON_START=true agregado a .env (evita datos duplicados al reiniciar)."
+    new_value="true"
+    log "WAIT_ON_START=true — esperará ${interval_mins} minutos antes de la primera consulta."
+  fi
+
+  if grep -qE '^WAIT_ON_START=' "$APP_DIR/.env"; then
+    sed -i "s/^WAIT_ON_START=.*/WAIT_ON_START=${new_value}/" "$APP_DIR/.env"
+  else
+    printf '\n# Espera un intervalo antes del primer ciclo para evitar datos duplicados al reiniciar\nWAIT_ON_START=%s\n' "$new_value" >> "$APP_DIR/.env"
   fi
 }
 

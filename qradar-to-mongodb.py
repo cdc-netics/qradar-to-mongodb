@@ -392,8 +392,29 @@ if __name__ == "__main__":
     else:
         log.info("MOTOR ACTIVO - Ciclo cada %ds", RUN_INTERVAL_SECONDS)
         if WAIT_ON_START:
-            log.info("WAIT_ON_START=true — esperando %ds antes del primer ciclo para evitar datos duplicados...", RUN_INTERVAL_SECONDS)
-            time.sleep(RUN_INTERVAL_SECONDS)
+            # Pre-inicializar LAST_RUNS con la hora actual para cada tarea y cada QRadar.
+            # Así cada tarea esperará su propio interval_minutes antes de la primera ejecución,
+            # sin bloquear las demás (REST API de 5 min no espera 60 min de AQL).
+            try:
+                with open(os.path.join(os.path.dirname(__file__), "queries.json"), "r", encoding="utf-8") as _f:
+                    _tasks = json.load(_f)
+                _now = datetime.now()
+                _n = 1
+                while True:
+                    _ip = os.getenv(f"QRADAR_{_n}_IP")
+                    if not _ip:
+                        break
+                    _qr_name = os.getenv(f"QRADAR_{_n}_NAME", f"qradar_{_n}")
+                    LAST_RUNS[_qr_name] = {}
+                    for _t in _tasks:
+                        _t_id = _t.get("id", "unnamed")
+                        _interval = int(_t.get("interval_minutes", SYNC_INTERVAL_MINUTES))
+                        LAST_RUNS[_qr_name][_t_id] = _now
+                        log.info("WAIT_ON_START: tarea '%s' ejecutará en ~%d min", _t_id, _interval)
+                    _n += 1
+                log.info("WAIT_ON_START=true — cada tarea esperará su propio intervalo antes de la primera consulta.")
+            except Exception as _e:
+                log.warning("WAIT_ON_START: no se pudo pre-inicializar intervalos: %s. Las tareas correrán de inmediato.", _e)
         while True:
             try:
                 run_sync_cycle()
