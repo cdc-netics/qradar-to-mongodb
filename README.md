@@ -87,8 +87,19 @@ Si usó el instalador automático, puede gestionar el proceso como un servicio e
 # Ver si el servicio está corriendo y sus últimos logs
 sudo systemctl status qradar-to-mongodb
 
-# Ver logs en tiempo real
-sEl script puede ejecutarse interactuando con el programador o ejecutando tareas específicas al instante:
+# Ver logs en tiempo real (journal de systemd)
+sudo journalctl -u qradar-to-mongodb -f
+
+# Ver logs desde el archivo (si LOG_FILE está configurado en .env)
+tail -f /var/log/qradar-to-mongodb.log
+
+# Iniciar / Detener / Reiniciar el servicio
+sudo systemctl start qradar-to-mongodb
+sudo systemctl stop qradar-to-mongodb
+sudo systemctl restart qradar-to-mongodb
+```
+
+El script también puede ejecutarse manualmente para pruebas aisladas:
 
 ```bash
 # 1. Ejecutar el ciclo completo una vez frente a todas las instancias (cron mode).
@@ -99,6 +110,78 @@ python3 qradar-to-mongodb.py --task offenses_sync
 ```
 
 Si desea ejecución continua (daemon), asegúrese de tener `RUN_CONTINUOUS=true` en su `.env`. El servicio evaluará independientemente los intervalos (`interval_minutes`) de cada tarea definida en `queries.json`.
+
+---
+
+## 📋 Logs y Diagnóstico
+
+### Dónde quedan los logs
+
+El comportamiento depende de cómo esté configurado `LOG_FILE` en `.env`:
+
+| Configuración | Dónde ver los logs |
+| :--- | :--- |
+| `LOG_FILE=` (vacío) | Solo en `journalctl` si corre como servicio systemd |
+| `LOG_FILE=/var/log/qradar-to-mongodb.log` | En ese archivo **y** en `journalctl` |
+
+### Variables de configuración de logs (`.env`)
+
+| Variable | Descripción | Default |
+| :--- | :--- | :--- |
+| `LOG_LEVEL` | Nivel de detalle: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `LOG_FILE` | Ruta al archivo de log. Vacío = solo consola/journal | *(vacío)* |
+| `LOG_MAX_BYTES` | Tamaño máximo del archivo antes de rotar (bytes) | `5242880` (5 MB) |
+| `LOG_BACKUP_COUNT` | Archivos históricos a conservar (`.log.1`, `.log.2`, ...) | `5` |
+
+### Qué registra cada nivel
+
+- **`INFO`** (recomendado en producción): inicio del proceso con PID, inicio/fin de cada ciclo, cuántos documentos insertó cada tarea y cuánto tardó, advertencias cuando una tarea devuelve 0 resultados.
+- **`DEBUG`** (recomendado para diagnosticar): todo lo anterior más la query AQL enviada, cada intento de polling a QRadar, campos faltantes en el mapeo, muestra del primer documento insertado y tareas omitidas por intervalo.
+
+### Comandos para ver los logs
+
+```bash
+# Logs en tiempo real desde journalctl (sin necesitar LOG_FILE)
+sudo journalctl -u qradar-to-mongodb -f
+
+# Logs en tiempo real desde archivo
+tail -f /var/log/qradar-to-mongodb.log
+
+# Últimas 100 líneas
+tail -n 100 /var/log/qradar-to-mongodb.log
+
+# Solo errores
+grep ERROR /var/log/qradar-to-mongodb.log
+
+# Logs de una tarea específica
+grep "offenses_sync" /var/log/qradar-to-mongodb.log
+```
+
+### Ejemplo de salida normal (`INFO`)
+
+```
+2026-04-27 14:00:01 [INFO] ============================================================
+2026-04-27 14:00:01 [INFO] Iniciando qradar-to-mongodb | PID=1234 | LOG_LEVEL=INFO | LOG_FILE=/var/log/qradar-to-mongodb.log
+2026-04-27 14:00:01 [INFO] ==== INICIO CICLO DE SINCRONIZACIÓN ====
+2026-04-27 14:00:01 [INFO] QRadar cargado: qradar_principal (10.0.105.100)
+2026-04-27 14:00:01 [INFO] --- INICIO TAREA: offenses_sync [rest_api] (QRadar: qradar_principal) ---
+2026-04-27 14:00:02 [INFO] Limpieza previa en 'alertas_qradar': 8 documentos eliminados
+2026-04-27 14:00:02 [INFO] REST API completado: 3 registros obtenidos
+2026-04-27 14:00:02 [INFO] FIN TAREA offenses_sync: 3 documentos insertados en 'alertas_qradar' (1.2s)
+2026-04-27 14:00:02 [INFO] ==== FIN CICLO: 1 ejecutadas, 2 omitidas (1.4s) ====
+```
+
+### Señales que indican un problema
+
+| Mensaje en el log | Causa probable |
+| :--- | :--- |
+| `[ERROR] Sin conexión con QRadar` | IP incorrecta o firewall bloqueando puerto 443 |
+| `[ERROR] Error HTTP: 401` | Token SEC expirado o sin permisos |
+| `[ERROR] Timeout al conectar con QRadar` | QRadar lento o no responde (`REQUEST_TIMEOUT` muy bajo) |
+| `[ERROR] No se pudo conectar a MongoDB` | MongoDB caído o credenciales incorrectas |
+| `[ERROR] Error de operación en MongoDB` | Usuario sin permisos de escritura en la base de datos |
+| `[WARNING] 0 registros devueltos` | La consulta no tiene datos en ese intervalo (puede ser normal) |
+| `[CRITICAL] EXCEPCIÓN NO CAPTURADA` | El proceso va a terminar — revisar traceback completo |
 
 ---
 
