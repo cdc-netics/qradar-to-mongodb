@@ -150,6 +150,41 @@ repair_env_permissions() {
   fi
 }
 
+# Crea el archivo de log definido en LOG_FILE (si existe en .env) con los permisos correctos.
+setup_log_file() {
+  if [[ ! -f "$APP_DIR/.env" ]]; then
+    return
+  fi
+
+  local log_file
+  log_file=$(grep -E '^LOG_FILE=' "$APP_DIR/.env" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
+
+  if [[ -z "$log_file" ]]; then
+    log "LOG_FILE no definido en .env — los logs irán solo a journalctl."
+    return
+  fi
+
+  local log_dir
+  log_dir=$(dirname "$log_file")
+
+  log "Preparando archivo de log: $log_file"
+
+  if [[ ! -d "$log_dir" ]]; then
+    mkdir -p "$log_dir" || { warn "No se pudo crear el directorio $log_dir. Verifique permisos."; return; }
+  fi
+
+  if [[ ! -f "$log_file" ]]; then
+    touch "$log_file" || { warn "No se pudo crear $log_file. Verifique permisos del directorio $log_dir."; return; }
+    log "Archivo de log creado: $log_file"
+  else
+    log "Archivo de log existente: $log_file"
+  fi
+
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$log_file"
+  chmod 640 "$log_file"
+  log "Permisos aplicados: owner=$SERVICE_USER:$SERVICE_GROUP modo=640"
+}
+
 # Escanea el .env buscando valores de ejemplo que aún no han sido cambiados.
 validate_env_placeholders() {
   if grep -q "replace-with.*token" "$APP_DIR/.env"; then
@@ -336,6 +371,7 @@ install_flow() {
   setup_venv
   setup_env_file
   validate_env_placeholders
+  setup_log_file
   write_systemd_unit
   enable_service
   show_status
@@ -386,6 +422,7 @@ repair_flow() {
 
   repair_env_permissions
   validate_env_placeholders
+  setup_log_file
   write_systemd_unit
   enable_service
   show_status

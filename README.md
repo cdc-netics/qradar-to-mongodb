@@ -71,6 +71,7 @@ Para preparar el entorno y activar el servicio:
 1. **Dar permisos**: `chmod +x scripts/install_service.sh`
 2. **Ejecutar**: `./scripts/install_service.sh`
 3. **Seleccionar Opción 1**: "Instalar / Actualizar servicio".
+4. **Aplicar el fix en el server sin reinstalar completo**:`sudo ./scripts/install_service.sh repair`
 
 El instalador creará el entorno virtual, instalará dependencias, configurará el archivo `.env` y levantará el servicio en `systemd`.
 

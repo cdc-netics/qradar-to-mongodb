@@ -4,7 +4,33 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
-## [v0.4.0] - 2026-03-24
+## [v0.5.0] - 2026-04-27
+
+### Añadido
+
+- **Sistema de logging estructurado**: Reemplazados todos los `print()` por el módulo `logging` de Python con niveles `DEBUG`, `INFO`, `WARNING`, `ERROR` y `CRITICAL`. Cada mensaje incluye timestamp, nivel y texto descriptivo. Antes era imposible saber qué había pasado cuando el proceso fallaba o el dashboard mostraba 0 resultados.
+- **Archivo de log con rotación automática**: Nueva variable `LOG_FILE` para escribir logs en disco usando `RotatingFileHandler`. Cuando el archivo supera `LOG_MAX_BYTES` (5 MB por defecto) rota automáticamente conservando hasta `LOG_BACKUP_COUNT` archivos históricos. Evita que el log crezca indefinidamente.
+- **Variable `LOG_LEVEL`**: Permite cambiar el nivel de detalle sin tocar el código. `INFO` para producción, `DEBUG` para diagnosticar problemas.
+- **Variables `LOG_MAX_BYTES` y `LOG_BACKUP_COUNT`**: Controlan el tamaño y cantidad de archivos de rotación.
+- **Detección de crash y apagado limpio**: Registro de PID al iniciar, manejador `atexit` que loguea cuando el proceso termina, manejador `SIGTERM` para detectar `systemctl stop`, y `sys.excepthook` que loguea como `CRITICAL` cualquier excepción no capturada antes de que el proceso muera.
+- **Timing por tarea**: Cada tarea registra cuántos documentos insertó y cuántos segundos tardó (`FIN TAREA offenses_sync: 3 docs en 1.2s`). Permite detectar tareas lentas.
+- **Resumen de ciclo**: Al final de cada ciclo se registra cuántas tareas se ejecutaron, cuántas se omitieron por intervalo y el tiempo total.
+- **Errores diferenciados por tipo**: Manejo separado de `ConnectionError`, `HTTPError`, `Timeout` (QRadar) y `ConnectionFailure`, `ServerSelectionTimeoutError`, `OperationFailure` (MongoDB), con mensajes descriptivos y traceback completo en cada caso.
+- **Log del body HTTP en errores**: Cuando la API de QRadar responde con un código de error, se registra el código HTTP y los primeros 500 caracteres del body para facilitar el diagnóstico.
+- **Sección "Logs y Diagnóstico" en README**: Documentación completa sobre dónde quedan los logs, qué registra cada nivel, comandos para verlos y tabla de mensajes de error con su causa probable.
+
+### Corregido
+
+- **Bug: `continue` faltante en el skip de tareas por intervalo**: La lógica que omite tareas que aún no han cumplido su `interval_minutes` nunca hacía `continue`, causando que todas las tareas se ejecutaran en cada ciclo independientemente del intervalo configurado.
+- **Bug: parámetro `_filter_note` enviado a la API**: La tarea `offenses_sync` tenía una clave informativa `_filter_note` dentro de `params` que se enviaba como parámetro GET a la API de QRadar. Ahora se filtran automáticamente todas las claves que terminen en `_note`.
+
+### Cambiado
+
+- `process_task` ahora loguea inicio y fin con timing en lugar de imprimir texto sin formato.
+- `load_qradars()` loguea cada instancia descubierta al cargarla.
+- `run_sync_cycle()` loguea el número de tareas cargadas y el resumen final del ciclo.
+
+
 
 ### Añadido
 - **Soporte API REST**: El motor ahora soporta tareas de tipo `"rest_api"`, permitiendo sincronizar recursos nativos como Ofensas (`/api/siem/offenses`).

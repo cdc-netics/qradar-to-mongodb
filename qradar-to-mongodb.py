@@ -61,12 +61,30 @@ LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", 5))          # 5 archivos d
 _log_fmt  = "%(asctime)s [%(levelname)s] %(message)s"
 _log_date = "%Y-%m-%d %H:%M:%S"
 _log_handlers = [logging.StreamHandler()]
+_log_file_warning = None  # se emite después de inicializar el logger
+
 if LOG_FILE:
-    _file_handler = logging.handlers.RotatingFileHandler(
-        LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
-    )
-    _file_handler.setFormatter(logging.Formatter(_log_fmt, _log_date))
-    _log_handlers.append(_file_handler)
+    # Crear el directorio si no existe
+    _log_dir = os.path.dirname(LOG_FILE)
+    if _log_dir:
+        try:
+            os.makedirs(_log_dir, exist_ok=True)
+        except OSError:
+            pass  # si falla, el RotatingFileHandler lo reportará abajo
+    try:
+        _file_handler = logging.handlers.RotatingFileHandler(
+            LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
+        )
+        _file_handler.setFormatter(logging.Formatter(_log_fmt, _log_date))
+        _log_handlers.append(_file_handler)
+    except OSError as _e:
+        _log_file_warning = (
+            f"No se pudo abrir el archivo de log '{LOG_FILE}': {_e}. "
+            "Los logs solo se escribirán en consola/journal. "
+            "Solución: ajuste LOG_FILE en .env a una ruta con permisos de escritura, "
+            "o cree el archivo manualmente: "
+            f"sudo touch {LOG_FILE} && sudo chown $(whoami) {LOG_FILE}"
+        )
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -76,7 +94,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
+if _log_file_warning:
+    log.warning(_log_file_warning)
+
+
 # Manejadores de salida y señales: detectar crashes y apagados
 # ---------------------------------------------------------------------------
 def _on_exit():
