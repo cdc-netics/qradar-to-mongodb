@@ -185,6 +185,24 @@ setup_log_file() {
   log "Permisos aplicados: owner=$SERVICE_USER:$SERVICE_GROUP modo=640"
 }
 
+# Asegura que WAIT_ON_START=true quede activo en .env al instalar.
+# Evita que el primer ciclo inmediato tras un restart genere datos duplicados.
+ensure_wait_on_start() {
+  if [[ ! -f "$APP_DIR/.env" ]]; then
+    return
+  fi
+
+  if grep -qE '^WAIT_ON_START=' "$APP_DIR/.env"; then
+    # La variable ya existe: reemplazar su valor por true
+    sed -i 's/^WAIT_ON_START=.*/WAIT_ON_START=true/' "$APP_DIR/.env"
+    log "WAIT_ON_START=true activado en .env (evita datos duplicados al reiniciar)."
+  else
+    # La variable no existe: agregarla al final
+    printf '\n# Espera un intervalo antes del primer ciclo para evitar datos duplicados al reiniciar\nWAIT_ON_START=true\n' >> "$APP_DIR/.env"
+    log "WAIT_ON_START=true agregado a .env (evita datos duplicados al reiniciar)."
+  fi
+}
+
 # Escanea el .env buscando valores de ejemplo que aún no han sido cambiados.
 validate_env_placeholders() {
   if grep -q "replace-with.*token" "$APP_DIR/.env"; then
@@ -370,6 +388,7 @@ install_flow() {
   check_paths
   setup_venv
   setup_env_file
+  ensure_wait_on_start
   validate_env_placeholders
   setup_log_file
   write_systemd_unit

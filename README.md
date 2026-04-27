@@ -59,6 +59,7 @@ El script utiliza un archivo `.env` para su configuración. Use `.env.example` c
 | `SYNC_INTERVAL_MINUTES`| Ventana AQL y frecuencia (minutos) | `60` |
 | `APP_TIMEZONE` | Zona horaria para campos de fecha | `America/Santiago` |
 | `RUN_CONTINUOUS` | Ejecutar en bucle infinito | `true` |
+| `WAIT_ON_START` | Esperar un intervalo antes del primer ciclo (evita datos duplicados al reiniciar) | `false` |
 
 > **Nota**: Puede configurar múltiples instancias QRadar usando la convención numérica: `QRADAR_1_IP`, `QRADAR_1_TOKEN`, `QRADAR_2_IP`, `QRADAR_2_TOKEN`, etc. El script las detecta automáticamente.
 
@@ -239,7 +240,56 @@ Ejemplo de salida:
 - **El script no inicia (ModuleNotFoundError)**: Asegúrese de estar ejecutando el script dentro del entorno virtual (`source .venv/bin/activate`).
 - **Fallas de conexión a MongoDB**: Verifique que `MONGO_USER` y `MONGO_PASSWORD` sean correctos o que la `MONGO_URI` no tenga errores de sintaxis. Use `repair` en el instalador si sospecha de permisos en `.env`.
 - **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
-- **Error al bajar cambios (git pull)**: Si git detecta cambios locales (comúnmente tras un `chmod`) que impiden el pull, use: `git stash push -m "local-install-script-fix"` para limpiar el estado temporalmente y reintentar el `git pull`.
+- **Datos duplicados o inflados tras un restart**: Cada vez que el servicio reinicia, ejecuta inmediatamente el primer ciclo y reinserta datos para la ventana de tiempo actual. Si el ciclo anterior ya corrió antes del restart, esa ventana tendrá registros dobles. Para limpiarlos, conéctese a MongoDB y borre por `hora_minuto` (o por `dia` + rango de `hora`):
+
+  ```javascript
+  use qradar_db   // ← use el nombre real de su DB (valor de MONGO_DB en .env)
+
+  // Borrar registros de una hora/minuto específica
+  db.metricas_eps.deleteMany({ "hora_minuto": "11:23" })
+  db.logsource_summary.deleteMany({ "hora_minuto": "11:23" })
+
+  // O borrar todo un día a partir de cierta hora (más amplio)
+  db.metricas_eps.deleteMany({ dia: "2026-04-27", hora: { $gte: "10:00" } })
+  db.logsource_summary.deleteMany({ dia: "2026-04-27", hora: { $gte: "10:00" } })
+  ```
+
+  Para evitar este problema en producción, active `WAIT_ON_START=true` en su `.env`. Con eso, el script espera un intervalo completo (`RUN_INTERVAL_SECONDS`) antes de su primer ciclo, evitando la superposición con datos del ciclo anterior:
+
+  ```env
+  WAIT_ON_START=true
+  ```
+
+  > **Nota**: Con `WAIT_ON_START=true` hay un retraso visible al arrancar el servicio. Si prefiere datos inmediatos y acepta limpiar manualmente en caso de restart, deje el valor en `false` (default).
+
+- **Error al bajar cambios (git pull)**: si aparece `Your local changes to the following files would be overwritten by merge` y el único archivo afectado es `scripts/install_service.sh` (cambio típico de permisos), use este flujo recomendado:
+
+```bash
+# 1) Verificar qué cambió
+git diff --summary
+
+# 2) Restaurar el archivo local
+git restore scripts/install_service.sh
+
+# 3) Actualizar desde remoto
+git pull origin main
+```
+
+Si quiere evitar este problema en ese servidor para futuros `chmod`, configure una vez:
+
+```bash
+git config core.filemode false
+```
+
+Si además tiene cambios reales en código (no solo permisos), use `stash`:
+
+```bash
+git stash push -m "wip-local-before-pull"
+git pull origin main
+git stash pop
+```
+
+Tip: antes de cualquier actualización ejecute `git status`.
 
 
 ---

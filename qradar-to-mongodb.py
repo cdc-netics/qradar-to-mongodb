@@ -51,6 +51,8 @@ DEBUG_TXT_FILE = os.getenv("DEBUG_TXT_FILE", "debug_qradar_output.txt")
 # Control de ejecución continua
 RUN_CONTINUOUS = os.getenv("RUN_CONTINUOUS", "false").strip().lower() == "true"
 RUN_INTERVAL_SECONDS = int(os.getenv("RUN_INTERVAL_SECONDS", 60))
+# Si True, espera un intervalo completo antes del primer ciclo (evita datos duplicados al reiniciar)
+WAIT_ON_START = os.getenv("WAIT_ON_START", "false").strip().lower() == "true"
 
 # Configuración de logging
 LOG_LEVEL     = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -389,6 +391,9 @@ if __name__ == "__main__":
         run_sync_cycle()
     else:
         log.info("MOTOR ACTIVO - Ciclo cada %ds", RUN_INTERVAL_SECONDS)
+        if WAIT_ON_START:
+            log.info("WAIT_ON_START=true — esperando %ds antes del primer ciclo para evitar datos duplicados...", RUN_INTERVAL_SECONDS)
+            time.sleep(RUN_INTERVAL_SECONDS)
         while True:
             try:
                 run_sync_cycle()
