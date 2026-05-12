@@ -86,7 +86,7 @@ Consulte la [Guía de Instalación en Linux](LINUX_SETUP.md) para los pasos deta
 Si usó el instalador automático, puede gestionar el proceso como un servicio estándar de Linux:
 
 ```bash
-#cuando hagas cambios  siempr esto
+#cuando hagas cambios  siempre esto
 **Ejecutar/actualizar algo**: `./scripts/install_service.sh`
 # Ver si el servicio está corriendo y sus últimos logs
 sudo systemctl status qradar-to-mongodb
