@@ -4,6 +4,20 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 
 El formato esta basado en Keep a Changelog y versionado semantico.
 
+## [v0.5.1] - 2026-05-14
+
+### Corregido
+
+- **Bug de instalación/reparación en servidores nuevos**: El instalador podía fallar cuando el usuario/grupo de servicio no existía (`chown: invalid user`) o dejar la unidad en `status=200/CHDIR` por permisos incompletos.
+
+### Cambiado
+
+- **Instalador autocorrectivo (`scripts/install_service.sh`)**:
+	- Ahora crea automáticamente el usuario/grupo de servicio si no existen.
+	- Ajusta el grupo primario del usuario de servicio cuando no coincide.
+	- Aplica permisos de runtime necesarios en `APP_DIR`, `.env`, `.venv` y `python` del venv para evitar fallas de `CHDIR` y lectura de `.env`.
+	- Ejecuta estas validaciones tanto en `install` como en `repair`, eliminando la necesidad de parches manuales post-instalación.
+
 ## [v0.5.0] - 2026-04-27
 
 ### Añadido
