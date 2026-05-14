@@ -173,6 +173,17 @@ setup_log_file() {
     mkdir -p "$log_dir" || { warn "No se pudo crear el directorio $log_dir. Verifique permisos."; return; }
   fi
 
+  # Importante para RotatingFileHandler: el usuario del servicio necesita
+  # permisos de escritura sobre el directorio del log para poder renombrar
+  # qradar-to-mongodb.log -> qradar-to-mongodb.log.1 durante la rotación.
+  if [[ "$log_dir" == "/var/log" ]]; then
+    warn "LOG_FILE apunta directamente a /var/log. La rotación puede fallar para usuarios no-root."
+    warn "Recomendado: LOG_FILE=/var/log/qradar-to-mongodb/qradar-to-mongodb.log"
+  else
+    chown "$SERVICE_USER:$SERVICE_GROUP" "$log_dir" || warn "No se pudo aplicar owner al directorio de logs: $log_dir"
+    chmod 750 "$log_dir" || warn "No se pudo aplicar permisos 750 al directorio de logs: $log_dir"
+  fi
+
   if [[ ! -f "$log_file" ]]; then
     touch "$log_file" || { warn "No se pudo crear $log_file. Verifique permisos del directorio $log_dir."; return; }
     log "Archivo de log creado: $log_file"

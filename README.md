@@ -95,7 +95,7 @@ sudo systemctl status qradar-to-mongodb
 sudo journalctl -u qradar-to-mongodb -f
 
 # Ver logs desde el archivo (si LOG_FILE está configurado en .env)
-tail -f /var/log/qradar-to-mongodb.log
+tail -f /var/log/qradar-to-mongodb/qradar-to-mongodb.log
 
 # Iniciar / Detener / Reiniciar el servicio
 sudo systemctl start qradar-to-mongodb
@@ -126,7 +126,9 @@ El comportamiento depende de cómo esté configurado `LOG_FILE` en `.env`:
 | Configuración | Dónde ver los logs |
 | :--- | :--- |
 | `LOG_FILE=` (vacío) | Solo en `journalctl` si corre como servicio systemd |
-| `LOG_FILE=/var/log/qradar-to-mongodb.log` | En ese archivo **y** en `journalctl` |
+| `LOG_FILE=/var/log/qradar-to-mongodb/qradar-to-mongodb.log` | En ese archivo **y** en `journalctl` |
+
+> **Importante**: Evite usar `LOG_FILE=/var/log/qradar-to-mongodb.log` (directo en la raíz de `/var/log`) cuando el servicio corre con un usuario no-root. La rotación automática (`.log` → `.log.1`) puede fallar por permisos del directorio.
 
 ### Variables de configuración de logs (`.env`)
 
@@ -149,23 +151,23 @@ El comportamiento depende de cómo esté configurado `LOG_FILE` en `.env`:
 sudo journalctl -u qradar-to-mongodb -f
 
 # Logs en tiempo real desde archivo
-tail -f /var/log/qradar-to-mongodb.log
+tail -f /var/log/qradar-to-mongodb/qradar-to-mongodb.log
 
 # Últimas 100 líneas
-tail -n 100 /var/log/qradar-to-mongodb.log
+tail -n 100 /var/log/qradar-to-mongodb/qradar-to-mongodb.log
 
 # Solo errores
-grep ERROR /var/log/qradar-to-mongodb.log
+grep ERROR /var/log/qradar-to-mongodb/qradar-to-mongodb.log
 
 # Logs de una tarea específica
-grep "offenses_sync" /var/log/qradar-to-mongodb.log
+grep "offenses_sync" /var/log/qradar-to-mongodb/qradar-to-mongodb.log
 ```
 
 ### Ejemplo de salida normal (`INFO`)
 
 ```
 2026-04-27 14:00:01 [INFO] ============================================================
-2026-04-27 14:00:01 [INFO] Iniciando qradar-to-mongodb | PID=1234 | LOG_LEVEL=INFO | LOG_FILE=/var/log/qradar-to-mongodb.log
+2026-04-27 14:00:01 [INFO] Iniciando qradar-to-mongodb | PID=1234 | LOG_LEVEL=INFO | LOG_FILE=/var/log/qradar-to-mongodb/qradar-to-mongodb.log
 2026-04-27 14:00:01 [INFO] ==== INICIO CICLO DE SINCRONIZACIÓN ====
 2026-04-27 14:00:01 [INFO] QRadar cargado: qradar_principal (10.0.105.100)
 2026-04-27 14:00:01 [INFO] --- INICIO TAREA: offenses_sync [rest_api] (QRadar: qradar_principal) ---
