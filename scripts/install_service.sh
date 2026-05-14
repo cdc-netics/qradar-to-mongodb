@@ -16,9 +16,10 @@ set -euo pipefail
 # --- CONFIGURACIÓN POR DEFECTO ---
 SERVICE_NAME="qradar-to-mongodb"
 APP_DIR="${APP_DIR:-/opt/qradar-to-mongodb}"
-# Intenta obtener el usuario que ejecutó sudo, si no, usa el usuario actual.
-SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$(id -un)}}"
-SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn "$SERVICE_USER")}"
+# Intenta obtener el usuario que ejecutó sudo; si no existe contexto sudo,
+# usa una cuenta de servicio dedicada por defecto.
+SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-qradar}}"
+SERVICE_GROUP="${SERVICE_GROUP:-$SERVICE_USER}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 SELECTED_ACTION=""
@@ -55,16 +56,47 @@ require_root() {
   fi
 }
 
-# Valida que el usuario y grupo definidos existan en el sistema Linux.
-validate_service_identity() {
-  if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-    err "El usuario de servicio no existe: $SERVICE_USER"
-    exit 1
+# Asegura que el usuario/grupo de servicio existan.
+ensure_service_identity() {
+  if ! getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
+    log "Creando grupo de servicio: $SERVICE_GROUP"
+    groupadd --system "$SERVICE_GROUP"
   fi
 
-  if ! getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
-    err "El grupo de servicio no existe: $SERVICE_GROUP"
-    exit 1
+  if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
+    log "Creando usuario de servicio: $SERVICE_USER"
+    useradd --system --gid "$SERVICE_GROUP" --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
+  fi
+
+  # Si el usuario existe pero su grupo primario no coincide, lo ajusta.
+  local current_group
+  current_group="$(id -gn "$SERVICE_USER")"
+  if [[ "$current_group" != "$SERVICE_GROUP" ]]; then
+    log "Ajustando grupo primario de $SERVICE_USER a $SERVICE_GROUP"
+    usermod -g "$SERVICE_GROUP" "$SERVICE_USER"
+  fi
+}
+
+# Corrige permisos necesarios para que systemd pueda hacer CHDIR y leer .env.
+ensure_runtime_permissions() {
+  log "Aplicando permisos base en directorio de aplicación..."
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR"
+  chmod 750 "$APP_DIR"
+
+  if [[ -f "$APP_DIR/.env" ]]; then
+    chown "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.env"
+    chmod 640 "$APP_DIR/.env"
+  fi
+
+  if [[ -d "$APP_DIR/.venv" ]]; then
+    chown -R "$SERVICE_USER:$SERVICE_GROUP" "$APP_DIR/.venv"
+    chmod 750 "$APP_DIR/.venv"
+    if [[ -d "$APP_DIR/.venv/bin" ]]; then
+      chmod 755 "$APP_DIR/.venv/bin"
+    fi
+    if [[ -f "$APP_DIR/.venv/bin/python" ]]; then
+      chmod 755 "$APP_DIR/.venv/bin/python"
+    fi
   fi
 }
 
@@ -419,8 +451,10 @@ MSG
 # Orquestador del flujo de instalación completa.
 install_flow() {
   check_paths
+  ensure_service_identity
   setup_venv
   setup_env_file
+  ensure_runtime_permissions
   ensure_wait_on_start
   validate_env_placeholders
   setup_log_file
@@ -466,6 +500,8 @@ WARN
 # Orquestador para reparar instalaciones rotas (permisos o rutas).
 repair_flow() {
   check_paths
+  ensure_service_identity
+  ensure_runtime_permissions
 
   if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
     warn "No se encontró el ejecutable de Python en el venv."
@@ -539,7 +575,10 @@ main() {
   require_cmd chown
   require_cmd getent
   require_cmd id
-  validate_service_identity
+  require_cmd groupadd
+  require_cmd useradd
+  require_cmd usermod
+  ensure_service_identity
 
   local raw_action="${1:-}"
   local action
