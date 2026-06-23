@@ -16,6 +16,7 @@ El formato esta basado en Keep a Changelog y versionado semantico.
 	- Ahora crea automáticamente el usuario/grupo de servicio si no existen.
 	- Ajusta el grupo primario del usuario de servicio cuando no coincide.
 	- Aplica permisos de runtime necesarios en `APP_DIR`, `.env`, `.venv` y `python` del venv para evitar fallas de `CHDIR` y lectura de `.env`.
+	- En `repair`, también valida/reconstruye el venv e instala `requirements.txt`, corrigiendo `ModuleNotFoundError` sin pasos manuales adicionales.
 	- Ejecuta estas validaciones tanto en `install` como en `repair`, eliminando la necesidad de parches manuales post-instalación.
 
 ## [v0.5.0] - 2026-04-27

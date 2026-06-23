@@ -503,10 +503,9 @@ repair_flow() {
   ensure_service_identity
   ensure_runtime_permissions
 
-  if [[ ! -x "$APP_DIR/.venv/bin/python" ]]; then
-    warn "No se encontró el ejecutable de Python en el venv."
-    warn "Se recomienda ejecutar la acción 'install' para reconstruir dependencias."
-  fi
+  # Repara también el runtime de Python para evitar ModuleNotFoundError
+  # cuando la instalación quedó incompleta o el venv está desactualizado.
+  setup_venv
 
   repair_env_permissions
   validate_env_placeholders

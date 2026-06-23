@@ -72,7 +72,9 @@ Para preparar el entorno y activar el servicio:
 1. **Dar permisos**: `chmod +x scripts/install_service.sh`
 2. **Ejecutar**: `./scripts/install_service.sh`
 3. **Seleccionar Opción 1**: "Instalar / Actualizar servicio".
-4. **Aplicar el fix en el server sin reinstalar completo**:`sudo ./scripts/install_service.sh repair`
+4. **Aplicar reparación integral sin reinstalar completo**: `sudo ./scripts/install_service.sh repair`
+
+  La acción `repair` ahora también valida/reconstruye el entorno virtual e instala `requirements.txt`, por lo que corrige errores como `ModuleNotFoundError` en un solo paso.
 
 El instalador creará el entorno virtual, instalará dependencias, configurará el archivo `.env` y levantará el servicio en `systemd`.
 
@@ -111,7 +113,12 @@ python3 qradar-to-mongodb.py
 
 # 2. Ejecutar SOLO UNA tarea ignorando intervalos (ideal para pruebas y debug).
 python3 qradar-to-mongodb.py --task offenses_sync
+
+# 3. Prueba forzada en servidor usando el Python del servicio (venv).
+/opt/qradar-to-mongodb/.venv/bin/python /opt/qradar-to-mongodb/qradar-to-mongodb.py --task logsource_summary
 ```
+
+La opción `--task` fuerza la ejecución inmediata de la tarea indicada (sin esperar su `interval_minutes`), útil para pruebas dirigidas y validaciones rápidas en producción.
 
 Si desea ejecución continua (daemon), asegúrese de tener `RUN_CONTINUOUS=true` en su `.env`. El servicio evaluará independientemente los intervalos (`interval_minutes`) de cada tarea definida en `queries.json`.
 
@@ -241,7 +248,7 @@ Ejemplo de salida:
 ## 🔍 Solución de Problemas (Troubleshooting)
 
 - **Error: search_id no devuelto**: Verifique que el `QRADAR_N_TOKEN` no haya expirado y que la `QRADAR_N_IP` sea accesible.
-- **El script no inicia (ModuleNotFoundError)**: Asegúrese de estar ejecutando el script dentro del entorno virtual (`source .venv/bin/activate`).
+- **El script no inicia (ModuleNotFoundError)**: Ejecute `sudo ./scripts/install_service.sh repair` para reconstruir/actualizar el venv e instalar dependencias automáticamente. Si desea ejecutar manualmente una tarea, use el Python del venv (`/opt/qradar-to-mongodb/.venv/bin/python`).
 - **Fallas de conexión a MongoDB**: Verifique que `MONGO_USER` y `MONGO_PASSWORD` sean correctos o que la `MONGO_URI` no tenga errores de sintaxis. Use `repair` en el instalador si sospecha de permisos en `.env`.
 - **EPS siempre es 1**: Si el volumen de eventos es muy bajo en relación a la ventana de tiempo (ej: menos de 3600 eventos en 60 minutos), el cálculo redondeará a 0 y la regla de negocio lo forzará a 1.
 - **Datos duplicados o inflados tras un restart**: Cada vez que el servicio reinicia, ejecuta inmediatamente el primer ciclo y reinserta datos para la ventana de tiempo actual. Si el ciclo anterior ya corrió antes del restart, esa ventana tendrá registros dobles. Para limpiarlos, conéctese a MongoDB y borre por `hora_minuto` (o por `dia` + rango de `hora`):
